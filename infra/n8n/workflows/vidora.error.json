@@ -1,0 +1,50 @@
+{
+  "id": "VidoraError00001",
+  "name": "vidora.error",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "id": "6f0b7f1e-0002-4c1e-9a10-000000000001",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "6f0b7f1e-0002-4c1e-9a10-000000000002",
+      "name": "Report failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// n8n Code node: \"Report failure\" in the vidora.error workflow (run once for all items).\n// Runs when any Vidora workflow execution crashes. Vidora finds the job by the execution ID it recorded at claim time.\nconst crypto = require(\"crypto\")\n\nconst { execution, workflow } = $input.first().json\nif (!execution || !execution.id) return [{ json: { reported: false, reason: \"no execution id (error before the run started)\" } }]\n\nconst base = String($env.VIDORA_APP_URL || \"\").replace(/\\/$/, \"\")\nconst secret = String($env.VIDORA_CALLBACK_SECRET || \"\").split(\",\")[0].trim()\nconst body = JSON.stringify({\n  message: String((execution.error && execution.error.message) || \"The workflow failed.\").slice(0, 5000),\n  node: execution.lastNodeExecuted || null,\n  workflow: (workflow && workflow.name) || null,\n})\nconst ts = Math.floor(Date.now() / 1000)\nconst sig = crypto.createHmac(\"sha256\", secret).update(`${ts}.${body}`).digest(\"hex\")\n\nconst res = await this.helpers.httpRequest({\n  method: \"POST\",\n  url: `${base}/api/internal/n8n/executions/${encodeURIComponent(String(execution.id))}/failed`,\n  body,\n  json: false,\n  headers: { \"content-type\": \"application/json\", \"x-vidora-timestamp\": String(ts), \"x-vidora-signature\": `v1=${sig}` },\n  returnFullResponse: true,\n  ignoreHttpStatusErrors: true,\n  timeout: 15000,\n})\nreturn [{ json: { reported: res.statusCode === 200, status: res.statusCode, body: res.body } }]\n"
+      }
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Report failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {}
+}

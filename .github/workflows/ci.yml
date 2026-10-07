@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: vidora
+          POSTGRES_PASSWORD: vidora
+          POSTGRES_DB: vidora
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U vidora -d vidora"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://vidora:vidora@localhost:5432/vidora
+      TEST_DATABASE_URL: postgres://vidora:vidora@localhost:5432/vidora
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Migrate test database
+        run: pnpm db:migrate
+      - name: Contrast, copy lint, typecheck, lint, unit + DB tests
+        run: pnpm check
+      - name: Migrations match the schema
+        run: |
+          pnpm db:generate --name ci_drift_check
+          if [ -n "$(git status --porcelain packages/db/migrations)" ]; then
+            echo "Schema changed without a migration. Run pnpm db:generate and commit it."
+            git status --porcelain packages/db/migrations
+            exit 1
+          fi
+      - name: n8n workflows are built from code/
+        run: |
+          pnpm n8n:build
+          git diff --exit-code infra/n8n/workflows
+      - name: Build web
+        run: pnpm build
+      - name: Build worker image
+        run: docker build -f infra/worker.Dockerfile -t vidora-worker:ci .

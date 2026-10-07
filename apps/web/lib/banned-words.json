@@ -1,0 +1,16 @@
+{
+  "$comment": "Vidora tone of voice. Enforced on UI copy by `pnpm copy-lint`. Source: .claude/skills/vidora-design/SKILL.md §7.",
+  "words": [
+    "delve", "seamless", "seamlessly", "game-changer", "game changer", "unlock", "supercharge", "elevate",
+    "leverage", "empower", "robust", "cutting-edge", "revolutionize", "harness", "tapestry", "journey",
+    "magic", "magical", "effortless", "effortlessly", "simply", "just", "easy", "easily", "please",
+    "click here", "users", "in today's fast-paced world", "it's important to note"
+  ],
+  "labels": ["Submit", "OK"],
+  "replacements": {
+    "users": "creators / you",
+    "Submit": "a verb that says what happens (Save strategy, Send changes)",
+    "OK": "a verb that says what happens (Got it, Keep it, Reject video)",
+    "click here": "a link that names its destination"
+  }
+}

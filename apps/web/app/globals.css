@@ -1,0 +1,252 @@
+/*
+ * Vidora design tokens.
+ * Source of truth: /DESIGN.md. Extensions (⊕) and the logo reconciliation: .claude/skills/vidora-design/SKILL.md.
+ * Never put raw hex values in components; use these tokens.
+ */
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ── Fixed palette (DESIGN.md, exact) ─────────────────────────────────────── */
+@theme {
+  --color-brand-orange: #ff4f00; /* colors.primary */
+  --color-on-primary: #fffefb;
+  --color-ink: #201515;
+  --color-ink-soft: #2f2a26;
+  --color-ink-mid: #36342e;
+  --color-body: #605d52;
+  --color-body-mid: #939084;
+  --color-mute: #c5c0b1;
+  --color-canvas: #fffefb;
+  --color-canvas-soft: #f8f4f0;
+
+  /* ⊕ Logo accent, decorative only (logo, icons, OG, progress/loader, illustrations) */
+  --color-logo-amber: #fd9a1b;
+  --color-logo-coral: #fd4e4e;
+
+  /* Spacing: Tailwind's 4px base. DESIGN.md names map to steps:
+     xxs=0.5 xs=1 sm=2 md=3 lg=4 xl=6 2xl=8 3xl=12 4xl=16 (e.g. p-6 = spacing.xl 24px) */
+  --spacing: 4px;
+
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+
+  /* Type scale (DESIGN.md typography, exact). Display styles also need `font-display`. */
+  --text-display-xl: 56px;
+  --text-display-xl--line-height: 56px;
+  --text-display-xl--font-weight: 500;
+  --text-display-lg: 48px;
+  --text-display-lg--line-height: 48px;
+  --text-display-lg--font-weight: 500;
+  --text-display-md: 32px;
+  --text-display-md--line-height: 36px;
+  --text-display-md--font-weight: 500;
+  --text-display-md--letter-spacing: 1px;
+  --text-display-sub-lg: 48px;
+  --text-display-sub-lg--line-height: 49.92px;
+  --text-display-sub-lg--font-weight: 500;
+  --text-display-sub-md: 32px;
+  --text-display-sub-md--line-height: 40px;
+  --text-display-sub-md--font-weight: 400;
+  --text-display-sub-sm: 24px;
+  --text-display-sub-sm--line-height: 30px;
+  --text-display-sub-sm--font-weight: 600;
+  --text-display-sub-sm--letter-spacing: -0.6px;
+  --text-display-xs: 20px;
+  --text-display-xs--line-height: 25px;
+  --text-display-xs--font-weight: 700;
+  --text-display-xs--letter-spacing: -0.5px;
+  --text-body-lg: 20px;
+  --text-body-lg--line-height: 30px;
+  --text-body-lg--letter-spacing: -0.2px;
+  --text-body-md: 18px;
+  --text-body-md--line-height: 27px;
+  --text-body-md-strong: 18px;
+  --text-body-md-strong--line-height: 27px;
+  --text-body-md-strong--font-weight: 600;
+  --text-body-sm: 16px;
+  --text-body-sm--line-height: 24px;
+  --text-body-sm-strong: 16px;
+  --text-body-sm-strong--line-height: 24px;
+  --text-body-sm-strong--font-weight: 600;
+  --text-caption: 14px;
+  --text-caption--line-height: 21px;
+  --text-eyebrow: 14px;
+  --text-eyebrow--line-height: 14px;
+  --text-eyebrow--font-weight: 500;
+  --text-eyebrow--letter-spacing: 1px;
+  /* Deviation from DESIGN.md (18px/600): 19px/700 makes #fffefb on #ff4f00 (3.27:1) large text, so it passes AA. */
+  --text-button-md: 19px;
+  --text-button-md--line-height: 27px;
+  --text-button-md--font-weight: 700;
+  --text-button-sm: 14.4px;
+  --text-button-sm--line-height: 14.4px;
+  --text-button-sm--font-weight: 700;
+  --text-button-sm--letter-spacing: 0.144px;
+
+  --ease-out-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* ── Semantic roles (mode dependent) ──────────────────────────────────────── */
+@theme inline {
+  --font-sans: var(--font-inter), system-ui, -apple-system, sans-serif;
+  --font-display: var(--font-mona-sans), var(--font-inter), system-ui, sans-serif;
+  --font-heading: var(--font-sans); /* DESIGN.md: display face only for hero + eyebrow */
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-text: var(--primary-text);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-surface-raised: var(--surface-raised);
+
+  /* DESIGN.md radius: sm 6, md 12 (buttons + cards), pill/full 9999. shadcn's larger steps collapse to 12. */
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 12px;
+  --radius-xl: 12px;
+  --radius-2xl: 12px;
+  --radius-3xl: 12px;
+  --radius-4xl: 12px;
+
+  --shadow-modal: var(--elevation-modal);
+  --gradient-brand: linear-gradient(140deg, #fd9a1b 0%, #fd4e4e 100%);
+}
+
+:root {
+  --radius: 12px;
+  --background: #fffefb; /* canvas */
+  --foreground: #201515; /* ink */
+  --card: #f8f4f0; /* canvas-soft: surface contrast is the elevation */
+  --card-foreground: #201515;
+  --popover: #fffefb;
+  --popover-foreground: #201515;
+  --primary: #ff4f00;
+  --primary-foreground: #fffefb;
+  --primary-text: #c73e00; /* ⊕ orange text that passes AA on canvas (5.06:1) */
+  --secondary: #201515; /* button-secondary: ink */
+  --secondary-foreground: #fffefb;
+  --muted: #f8f4f0;
+  --muted-foreground: #605d52; /* body */
+  --subtle-foreground: #939084; /* body-mid: 18px+ metadata only */
+  --accent: #f8f4f0;
+  --accent-foreground: #201515;
+  --destructive: #b42318;
+  --border: #c5c0b1; /* mute: hairlines, dividers */
+  --input: #201515; /* DESIGN.md text-input: 1px ink border */
+  --ring: #ff4f00;
+  --success: #1f7a4d; /* ⊕ status only */
+  --warning: #8a5a00; /* ⊕ status only */
+  --danger: #b42318; /* ⊕ status only */
+  --surface-raised: #fffefb;
+  --elevation-modal: 0 12px 32px rgb(32 21 21 / 0.14);
+}
+
+/* ⊕ Dark mode (DESIGN.md has none). Polarity flips like DESIGN.md's featured cards. */
+.dark {
+  --background: #201515; /* ink */
+  --foreground: #fffefb;
+  --card: #2f2a26; /* ink-soft */
+  --card-foreground: #fffefb;
+  --popover: #2f2a26;
+  --popover-foreground: #fffefb;
+  --primary: #ff4f00;
+  --primary-foreground: #fffefb;
+  --primary-text: #ff6a2b; /* 4.96:1 on ink-soft, 6.23:1 on ink */
+  --secondary: #fffefb;
+  --secondary-foreground: #201515;
+  --muted: #2f2a26;
+  --muted-foreground: #c5c0b1; /* mute: 9.79:1 on ink, 7.8:1 on ink-soft */
+  --subtle-foreground: #c5c0b1; /* body-mid fails on ink-soft, so dark uses mute */
+  --accent: #36342e;
+  --accent-foreground: #fffefb;
+  --destructive: #f97066;
+  --border: #36342e; /* ink-mid */
+  --input: #c5c0b1;
+  --ring: #ff4f00;
+  --success: #4fbf86;
+  --warning: #f2b544;
+  --danger: #f97066;
+  --surface-raised: #36342e;
+  --elevation-modal: 0 12px 32px rgb(0 0 0 / 0.4);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    @apply font-sans;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-background text-foreground text-body-sm;
+    font-feature-settings: "cv11", "ss01";
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+@layer utilities {
+  .bg-brand-gradient {
+    background-image: var(--gradient-brand);
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .safe-x {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+  .safe-bottom {
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Lists inside legal pages (LegalPage) */
+.legal-prose ul {
+  list-style: disc;
+  padding-left: 1.5rem;
+  display: grid;
+  gap: 0.5rem;
+}
+.legal-prose strong {
+  font-weight: 600;
+}

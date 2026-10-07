@@ -1,0 +1,26 @@
+{
+  "$comment": "WCAG pairs Vidora must pass. Tokens resolve from app/globals.css (:root = light, .dark = dark, @theme = fixed palette). Checked by `pnpm contrast` and shown live on /design-system.",
+  "notes": ["--subtle-foreground (body-mid #939084) is 2.92:1 on light cards (#f8f4f0), so it is banned on cards. Use --muted-foreground there."],
+  "pairs": [
+    { "fg": "--foreground", "bg": "--background", "min": 4.5, "use": "Body text on page" },
+    { "fg": "--foreground", "bg": "--card", "min": 4.5, "use": "Body text on cards" },
+    { "fg": "--muted-foreground", "bg": "--background", "min": 4.5, "use": "Secondary text on page" },
+    { "fg": "--muted-foreground", "bg": "--card", "min": 4.5, "use": "Secondary text on cards" },
+    { "fg": "--subtle-foreground", "bg": "--background", "min": 3, "use": "Metadata, 18px+ only" },
+    { "fg": "--primary-text", "bg": "--background", "min": 4.5, "use": "Orange text and links on page" },
+    { "fg": "--primary-text", "bg": "--card", "min": 4.5, "use": "Orange text and links on cards" },
+    { "fg": "--primary-foreground", "bg": "--primary", "min": 3, "use": "Primary button label (19px/700, large text)" },
+    { "fg": "--primary-foreground", "bg": "--primary-text", "min": 4.5, "mode": "light", "use": "Small primary button label" },
+    { "fg": "--color-ink", "bg": "--primary-text", "min": 4.5, "mode": "dark", "use": "Small primary button label" },
+    { "fg": "--secondary-foreground", "bg": "--secondary", "min": 4.5, "use": "Secondary button label" },
+    { "fg": "--color-on-primary", "bg": "--destructive", "min": 4.5, "mode": "light", "use": "Destructive button label" },
+    { "fg": "--color-ink", "bg": "--destructive", "min": 4.5, "mode": "dark", "use": "Destructive button label" },
+    { "fg": "--success", "bg": "--card", "min": 4.5, "use": "Success status on pill" },
+    { "fg": "--warning", "bg": "--card", "min": 4.5, "use": "Warning status on pill" },
+    { "fg": "--danger", "bg": "--card", "min": 4.5, "use": "Error status on pill" },
+    { "fg": "--danger", "bg": "--background", "min": 4.5, "use": "Field error text" },
+    { "fg": "--ring", "bg": "--background", "min": 3, "use": "Focus ring (non-text)" },
+    { "fg": "--ring", "bg": "--card", "min": 3, "use": "Focus ring on cards (non-text)" },
+    { "fg": "--input", "bg": "--background", "min": 3, "use": "Input border (non-text)" }
+  ]
+}

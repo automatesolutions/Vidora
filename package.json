@@ -1,0 +1,35 @@
+{
+  "name": "vidora",
+  "private": true,
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm --filter web build",
+    "lint": "pnpm --filter web lint",
+    "typecheck": "pnpm -r typecheck",
+    "contrast": "node scripts/contrast-check.mjs",
+    "copy-lint": "node scripts/copy-lint.mjs",
+    "brand": "node scripts/brand-assets.mjs",
+    "check": "pnpm contrast && pnpm copy-lint && pnpm typecheck && pnpm lint && pnpm test",
+    "dev:worker": "pnpm --filter @vidora/worker dev",
+    "test": "vitest run --root packages/core && vitest run --root packages/db",
+    "db:generate": "pnpm --filter @vidora/db db:generate",
+    "db:migrate": "node --env-file-if-exists=.env node_modules/tsx/dist/cli.mjs packages/db/src/migrate.ts",
+    "stack:up": "docker compose -f infra/docker-compose.yml --env-file .env --profile dev up -d",
+    "stack:down": "docker compose -f infra/docker-compose.yml --env-file .env --profile dev down",
+    "n8n:build": "node infra/n8n/build-workflows.mjs",
+    "smoke": "pnpm --filter @vidora/worker smoke",
+    "launch-check": "node scripts/launch-check.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "potrace": "^2.1.8",
+    "sharp": "^0.35.5",
+    "tsx": "^4.23.15",
+    "typescript": "^5",
+    "vitest": "^5.0.3"
+  }
+}
