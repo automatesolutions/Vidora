@@ -9,6 +9,41 @@ export const CREDIT_COST: Record<VideoTier, number> = {
   long_standard: 150,
 }
 
+// Short lengths the create-video wizard offers. Priced below the 45 s Standard short (20 credits),
+// at about $0.08 provider cost per credit: 8 s ≈ $0.48 budget, 15 s ≈ $0.80 budget.
+export const SHORT_LENGTHS = [8, 15] as const
+export type ShortLength = (typeof SHORT_LENGTHS)[number]
+
+export const SHORT_CREDIT_COST: Record<ShortLength, number> = { 8: 6, 15: 10 }
+
+// The pipeline stops before it spends more than this (limits.max_cost_usd). Leaves room under the budget.
+const SHORT_MAX_COST_USD: Record<ShortLength, number> = { 8: 0.45, 15: 0.75 }
+
+export function isShortLength(sec: number): sec is ShortLength {
+  return (SHORT_LENGTHS as readonly number[]).includes(sec)
+}
+
+export function shortCreditCost(lengthSec: number): number {
+  if (!isShortLength(lengthSec)) throw new Error(`Shorts are ${SHORT_LENGTHS.join(" or ")} seconds, not ${lengthSec}`)
+  return SHORT_CREDIT_COST[lengthSec]
+}
+
+export function shortMaxCostUsd(lengthSec: number): number {
+  if (!isShortLength(lengthSec)) throw new Error(`Shorts are ${SHORT_LENGTHS.join(" or ")} seconds, not ${lengthSec}`)
+  return SHORT_MAX_COST_USD[lengthSec]
+}
+
+/**
+ * What a new short costs. Each workspace's first video is free (on top of the trial credits).
+ * `creditsBase` is the list price, kept on the job so change requests are priced from it.
+ */
+export function creditsForNewVideo(input: { lengthSec: number; freeVideoAvailable: boolean }) {
+  const creditsBase = shortCreditCost(input.lengthSec)
+  return input.freeVideoAvailable
+    ? { creditsBase, credits: 0, isFree: true as const }
+    : { creditsBase, credits: creditsBase, isFree: false as const }
+}
+
 export const FREE_CHANGE_REQUESTS = 2
 
 export const PLANS = {
@@ -46,11 +81,14 @@ export function rerunFromStage(targets: readonly ChangeTarget[]): Stage {
   return STAGES[idx]!
 }
 
-/** Credits for a change request. The first FREE_CHANGE_REQUESTS per video are free. */
-export function changeRequestCost(tier: VideoTier, fromStage: Stage, changeRequestsSoFar: number): number {
+/**
+ * Credits for a change request. The first FREE_CHANGE_REQUESTS per video are free.
+ * `baseCredits` is the video's own list price (a 15 s short is 10, not the tier's 20).
+ */
+export function changeRequestCost(baseCredits: number, fromStage: Stage, changeRequestsSoFar: number): number {
   if (changeRequestsSoFar < FREE_CHANGE_REQUESTS) return 0
   const share = STAGES.slice(STAGES.indexOf(fromStage)).reduce((sum, s) => sum + STAGE_COST_SHARE[s], 0)
-  return Math.max(1, Math.ceil(CREDIT_COST[tier] * share))
+  return Math.max(1, Math.ceil(baseCredits * share))
 }
 
 /**

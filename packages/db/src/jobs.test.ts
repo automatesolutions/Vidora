@@ -82,7 +82,7 @@ suite("job lifecycle (Postgres)", () => {
     expect(await balance()).toEqual({ available: 80, reserved: 0 })
 
     const events = await db.select().from(jobEvents).where(eq(jobEvents.jobId, job.id))
-    expect(events.map((e) => e.event).sort()).toEqual(["claim", "complete", "create"])
+    expect(events.map((e) => e.event).sort()).toEqual(["claim", "complete", "create", "stage_completed"])
   })
 
   it("releases credits when generation fails", async () => {

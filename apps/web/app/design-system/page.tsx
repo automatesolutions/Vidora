@@ -21,6 +21,7 @@ import { STATUS, StatusPill, type VideoStatus } from "@/components/vidora/status
 import { ThemeToggle } from "@/components/vidora/theme-toggle"
 import { VideoFrame } from "@/components/vidora/video-frame"
 import banned from "@/lib/banned-words.json"
+import { ChoiceCardsDemo, ReviewPartsDemo, UploaderDemo, WizardShellDemo } from "./create-demos"
 import { ApprovalDemo, LiveContrastTable, ToastDemo } from "./demos"
 
 // Internal component gallery. Off in production unless ENABLE_DESIGN_SYSTEM=true.
@@ -37,6 +38,8 @@ const SECTIONS = [
   ["status", "Status"],
   ["cards", "Cards"],
   ["icons", "Icons"],
+  ["create", "Create video"],
+  ["review-parts", "Review details"],
   ["review", "Video review"],
   ["states", "States"],
   ["copy", "Copy"],
@@ -428,6 +431,30 @@ export default function DesignSystemPage() {
               <PlatformIcon platform="tiktok" className="size-6 text-foreground" />
               Platform marks come from simple-icons, one color only.
             </div>
+          </Section>
+
+          <Section
+            id="create"
+            title="Create video"
+            intro="The create-video wizard: one decision per screen, native radios drawn as cards, and uploads that go straight to storage."
+          >
+            <Sub title="Wizard shell">
+              <WizardShellDemo />
+            </Sub>
+            <Sub title="Choice cards">
+              <ChoiceCardsDemo />
+            </Sub>
+            <Sub title="Photo uploader">
+              <UploaderDemo />
+            </Sub>
+          </Section>
+
+          <Section
+            id="review-parts"
+            title="Review details"
+            intro="Parts of the review page: the Shorts frame, hashtags with #Shorts locked, the cover picker, and the connect dialog that Approve opens."
+          >
+            <ReviewPartsDemo />
           </Section>
 
           <Section

@@ -137,6 +137,19 @@ services:
       interval: 5s
       retries: 10
 
+  # Local development only: S3-compatible storage standing in for Cloudflare R2 (same client code).
+  # Credentials are dev-only and live in infra/storage/s3.json (they match .env.example).
+  # `pnpm storage:seed` creates the bucket, sets CORS, and uploads the stub pipeline's sample video.
+  storage:
+    profiles: ["dev"]
+    image: chrislusf/seaweedfs:4.47 # pinned; MinIO no longer publishes community images
+    restart: unless-stopped
+    command: ["server", "-dir=/data", "-s3", "-s3.port=8333", "-s3.config=/etc/seaweedfs/s3.json", "-master.volumeSizeLimitMB=256", "-volume.max=20"]
+    ports: ["127.0.0.1:9000:8333"]
+    volumes:
+      - storage:/data
+      - ./storage/s3.json:/etc/seaweedfs/s3.json:ro
+
   worker:
     profiles: ["prod"]
     build:
@@ -163,3 +176,4 @@ volumes:
   n8n:
   redis:
   vidora-db:
+  storage:

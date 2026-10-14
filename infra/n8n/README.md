@@ -35,6 +35,8 @@ If you change a workflow in the editor (http://127.0.0.1:5678), export it back b
 - Headers: `x-vidora-timestamp` (unix seconds), `x-vidora-signature: v1=<hex>[,v1=<hex>]`, `idempotency-key: <job_id>:<revision>`
 - Signature: `HMAC_SHA256(VIDORA_INBOUND_SECRET, "<timestamp>.<JSON.stringify(body)>")`, 5-minute window
 - Body: `GenerateRequest` (job_id, revision, workspace_id, rerun_from_stage, feedback, strategy, topic, providers, limits, reuse_assets, callback_url)
+  - Optional, from the create-video wizard (2026-10-11): `video_type` (fact_tip | product_showcase | photo_to_life | quote), `look` (realistic | cinematic | cartoon_3d | anime | clean_minimal), `voice` (calm | energetic | deep | friendly | music_only), `captions_style` (bold_words | simple | none), `length_sec` (8 | 15, same as strategy.target_length_sec), `source_url`, `brand_kit` ({ logo_key, colors[], end_card_text }), `input_assets` ([{ kind: "photo", storage_key, mime }]). Files are storage keys only; the provider gateway reads them, never n8n.
+  - `job.completed` should report the `final_video` plus up to 6 `thumbnail` assets (ordinal 0–5) as cover-frame candidates. Stage callbacks are logged in `job_events` for the progress page.
 - Reply: `202 {"accepted": true, "execution_id": "..."}`, or `401` when the signature is wrong
 
 **Claim** (n8n → Vidora, first step): `POST {VIDORA_APP_URL}/api/internal/n8n/jobs/{job_id}/claim` with `{revision, execution_id}`.

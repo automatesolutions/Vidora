@@ -71,9 +71,43 @@ check(final!.title?.startsWith("Stub video") ?? false, "script stage data saved 
 check(final!.n8nExecutionId !== null, "n8n execution recorded", final!.n8nExecutionId)
 
 const events = await db.select().from(jobEvents).where(eq(jobEvents.jobId, job.id)).orderBy(asc(jobEvents.createdAt))
-check(events.map((e) => e.event).join(",") === "create,claim,complete", "job events: create → claim → complete", events.map((e) => e.event))
+const statusEvents = events.filter((e) => !e.event.startsWith("stage_")).map((e) => e.event)
+check(statusEvents.join(",") === "create,claim,complete", "job events: create → claim → complete", statusEvents)
+check(events.filter((e) => e.event === "stage_completed").length === 7, "every stage logged in job_events", events.map((e) => e.event))
 const files = await db.select().from(assets).where(eq(assets.jobId, job.id))
-check(files.map((f) => f.kind).sort().join(",") === "final_video,thumbnail", "final video and thumbnail assets saved", files.map((f) => f.kind))
+check([...new Set(files.map((f) => f.kind))].sort().join(",") === "final_video,thumbnail", "final video and thumbnail assets saved", files.map((f) => f.kind))
+
+// 3b. A create-video wizard job (8 s): new contract fields, short pricing, sample video and 6 cover frames.
+{
+  const brief = {
+    creator_kind: "creator",
+    video_type: "fact_tip",
+    topic: "Why octopuses have three hearts",
+    source_url: null,
+    photo_upload_id: null,
+    no_people_confirmed: false,
+    look: "cinematic",
+    voice: "calm",
+    language: "en",
+    captions_style: "bold_words",
+    length_sec: 8,
+    use_brand_kit: false,
+  } as const
+  const wiz = await createJob(db, { workspaceId: ws!.id, brief, actor: { type: "system" } })
+  console.log(`created ${wiz.id} (wizard, 8 s, ${wiz.isFree ? "free" : `${wiz.creditsReserved} credits`}), waiting for n8n…`)
+  const until = Date.now() + 60_000
+  let row: schema.VideoJob | undefined
+  while (Date.now() < until) {
+    ;[row] = await db.select().from(videoJobs).where(eq(videoJobs.id, wiz.id))
+    if (["pending_approval", "generation_failed"].includes(row!.status)) break
+    await new Promise((r) => setTimeout(r, 500))
+  }
+  check(row!.status === "pending_approval", "wizard job reaches pending_approval", { status: row!.status, error: row!.errorMessage })
+  check(row!.creditsCharged === (wiz.isFree ? 0 : 6), "wizard job charged 6 credits (or free)", { charged: row!.creditsCharged, free: wiz.isFree })
+  const wf = await db.select().from(assets).where(eq(assets.jobId, wiz.id))
+  check(wf.find((f) => f.kind === "final_video")?.storageKey === "samples/short-8s.mp4", "8 s sample video attached", wf.map((f) => f.storageKey))
+  check(wf.filter((f) => f.kind === "thumbnail").length === 6, "6 cover frame candidates attached", wf.length)
+}
 
 // 4. A crash inside n8n reaches Vidora through the vidora.error workflow and releases the credits.
 {

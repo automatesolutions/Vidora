@@ -12,7 +12,11 @@
   "dependencies": {
     "@vidora/core": "workspace:^",
     "@vidora/db": "workspace:^",
+    "@vidora/storage": "workspace:^",
     "pg-boss": "^12.37.0",
     "tsx": "^4.23.15"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.3"
   }
 }

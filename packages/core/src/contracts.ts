@@ -1,5 +1,6 @@
 import { z } from "zod"
-import { CHANGE_TARGETS, STAGES, VIDEO_TIERS } from "./credits"
+import { BrandKitSchema, CAPTION_STYLES, InputAssetSchema, LOOKS, VIDEO_TYPES, VOICES } from "./brief"
+import { CHANGE_TARGETS, SHORT_LENGTHS, STAGES, VIDEO_TIERS } from "./credits"
 
 // Vidora ↔ n8n webhook contracts (docs/PLAN.md §4.2–4.3). Both sides validate against these.
 // n8n imports nothing from here; infra/n8n/README.md mirrors the shapes for workflow authors.
@@ -50,6 +51,16 @@ export const GenerateRequestSchema = z.object({
   limits: z.object({ max_cost_usd: z.number().positive(), max_clip_seconds: z.number().int().positive() }),
   reuse_assets: z.record(z.string(), z.string()),
   callback_url: z.url(),
+  // Create-video wizard choices (optional, so strategy-driven jobs and older payloads still validate).
+  // When length_sec is set, strategy.target_length_sec carries the same value.
+  video_type: z.enum(VIDEO_TYPES).optional(),
+  look: z.enum(LOOKS).optional(),
+  voice: z.enum(VOICES).optional(),
+  captions_style: z.enum(CAPTION_STYLES).optional(),
+  length_sec: z.literal(SHORT_LENGTHS).optional(),
+  source_url: z.url().nullable().optional(),
+  brand_kit: BrandKitSchema.nullable().optional(),
+  input_assets: z.array(InputAssetSchema).max(5).optional(),
 })
 export type GenerateRequest = z.infer<typeof GenerateRequestSchema>
 

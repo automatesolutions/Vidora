@@ -125,7 +125,7 @@ Breakpoints: mobile < 768 · tablet 768–1023 · desktop ≥ 1024.
 
 Video player frame · approval action bar · swipe card · bottom sheet · pipeline stepper / progress (uses
 `gradient-brand`) · status pill (semantic) · platform chip · calendar · switch · select · date-time picker ·
-skeleton · dark mode. Each must appear on `/design-system` with all its states before use in a screen.
+skeleton · dark mode. Added 2026-10-11 (create-video and review milestone): choice cards (radio group as cards) · wizard shell (step count, one heading, Back + one primary) · photo uploader (empty, uploading, uploaded, error) · Shorts frame (real player, channel row on top so it never covers the controls) · cover-frame picker · hashtag input (#Shorts locked) · connect dialog · change-request sheet · video list row. Each must appear on `/design-system` with all its states before use in a screen.
 
 ## 7. Tone of voice
 

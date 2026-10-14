@@ -16,7 +16,7 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core"
-import { JOB_STATUSES, POST_STATUSES, STAGES, VIDEO_TIERS } from "@vidora/core"
+import { CREATOR_KINDS, JOB_STATUSES, POST_STATUSES, STAGES, VIDEO_TIERS, VIDEO_TYPES, VISIBILITIES, type VideoBrief } from "@vidora/core"
 
 const createdAt = () => timestamp({ withTimezone: true }).notNull().defaultNow()
 const updatedAt = () =>
@@ -59,6 +59,11 @@ export const subscriptionStatus = pgEnum("subscription_status", [
 ])
 export const ledgerReason = pgEnum("ledger_reason", ["grant", "topup", "reserve", "release", "charge", "refund", "expire"])
 export const webhookSource = pgEnum("webhook_source", ["n8n", "stripe"])
+export const creatorKind = pgEnum("creator_kind", CREATOR_KINDS)
+export const videoType = pgEnum("video_type", VIDEO_TYPES)
+export const visibility = pgEnum("visibility", VISIBILITIES)
+export const uploadStatus = pgEnum("upload_status", ["pending", "ready", "rejected"])
+export const uploadPurpose = pgEnum("upload_purpose", ["input", "logo"])
 
 // ── Better Auth core tables ──────────────────────────────────────────────────
 // Default Better Auth model names. In Phase 1, diff against `npx @better-auth/cli generate` before migrating.
@@ -83,6 +88,7 @@ export const session = pgTable(
     userId: text()
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    activeWorkspaceId: text(), // organization plugin: activeOrganizationId
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -122,12 +128,18 @@ export const verification = pgTable("verification", {
 })
 
 // ── Workspaces ───────────────────────────────────────────────────────────────
+// Better Auth's organization plugin uses these two tables as `organization` and `member`
+// (packages/db/src/auth-adapter.ts maps the names). Columns it doesn't know have defaults.
 export const workspaces = pgTable("workspaces", {
   id: text().primaryKey(),
   name: text().notNull(),
   slug: text().notNull().unique(),
+  logo: text(), // organization plugin
+  metadata: text(), // organization plugin (JSON string)
   timezone: text().notNull().default("UTC"),
   plan: planId().notNull().default("trial"),
+  kind: creatorKind(), // "Who are you?" in the create-video wizard, asked once
+  freeVideoUsedAt: timestamp({ withTimezone: true }), // set when the first (free) video is created
   createdBy: text().references(() => user.id, { onDelete: "set null" }),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
@@ -136,6 +148,7 @@ export const workspaces = pgTable("workspaces", {
 export const workspaceMembers = pgTable(
   "workspace_members",
   {
+    id: text().primaryKey(),
     workspaceId: text()
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
@@ -145,7 +158,27 @@ export const workspaceMembers = pgTable(
     role: memberRole().notNull().default("reviewer"),
     createdAt: createdAt(),
   },
-  (t) => [primaryKey({ columns: [t.workspaceId, t.userId] }), index().on(t.userId)]
+  (t) => [uniqueIndex().on(t.workspaceId, t.userId), index().on(t.userId)]
+)
+
+// Organization plugin invitations. Team invites ship in Phase 2; the table exists so the plugin works.
+export const invitation = pgTable(
+  "invitation",
+  {
+    id: text().primaryKey(),
+    workspaceId: text()
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    email: text().notNull(),
+    role: text(),
+    status: text().notNull().default("pending"),
+    expiresAt: timestamp({ withTimezone: true }).notNull(),
+    inviterId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index().on(t.workspaceId), index().on(t.email)]
 )
 
 // YouTube / TikTok accounts Vidora posts to. Tokens are AES-256-GCM ciphertext (see docs/PLAN.md §9).
@@ -224,11 +257,22 @@ export const videoJobs = pgTable(
     version: integer().notNull().default(0), // optimistic lock, +1 on every status change
     tier: videoTier().notNull().default("short_standard"),
     topic: text(),
-    brief: jsonb().$type<Record<string, unknown>>().notNull().default({}),
+    // Wizard choices (VideoBriefSchema). Empty for strategy-driven jobs.
+    brief: jsonb().$type<Partial<VideoBrief>>().notNull().default({}),
+    videoType: videoType(),
+    lengthSec: integer(),
+    creditsBase: integer().notNull().default(0), // list price; change requests are priced from it
+    isFree: boolean().notNull().default(false), // the workspace's free first video
+    brandKitSnapshot: jsonb().$type<Record<string, unknown>>(), // brand kit as it was when the job was made
     script: jsonb(),
     title: text(),
-    caption: text(),
+    caption: text(), // the YouTube description, editable on the review page
     hashtags: text().array().notNull().default(sql`'{}'::text[]`),
+    // Review page choices, copied onto scheduled_posts when the video is approved.
+    visibility: visibility().notNull().default("public"),
+    madeForKids: boolean().notNull().default(false),
+    coverOrdinal: integer().notNull().default(0), // which `thumbnail` asset (frame candidate) is the cover
+    plannedPostAt: timestamp({ withTimezone: true }),
     currentStage: stage(),
     progress: real().notNull().default(0),
     rerunFromStage: stage(),
@@ -451,5 +495,43 @@ export const notifications = pgTable(
   (t) => [index().on(t.userId, t.readAt)]
 )
 
+// Files a creator uploads before a job exists (wizard photo, brand kit logo). Browser → R2 with a signed PUT,
+// then /api/uploads/[id]/complete checks the size and file type and marks it ready.
+export const uploads = pgTable(
+  "uploads",
+  {
+    id: text().primaryKey(),
+    workspaceId: text()
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: text().references(() => user.id, { onDelete: "set null" }),
+    purpose: uploadPurpose().notNull(),
+    storageKey: text().notNull().unique(),
+    mime: text().notNull(),
+    bytes: integer().notNull(),
+    status: uploadStatus().notNull().default("pending"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index().on(t.workspaceId, t.createdAt)]
+)
+
+// One brand kit per workspace for now. GENERATION.md G3 adds brand_kit_assets (characters, products, LUT).
+export const brandKits = pgTable("brand_kits", {
+  id: text().primaryKey(),
+  workspaceId: text()
+    .notNull()
+    .unique()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  logoUploadId: text().references(() => uploads.id, { onDelete: "set null" }),
+  colors: text().array().notNull().default(sql`'{}'::text[]`),
+  endCardText: text(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+})
+
 export type VideoJob = typeof videoJobs.$inferSelect
 export type Workspace = typeof workspaces.$inferSelect
+export type ConnectedAccount = typeof connectedAccounts.$inferSelect
+export type Upload = typeof uploads.$inferSelect
+export type BrandKitRow = typeof brandKits.$inferSelect

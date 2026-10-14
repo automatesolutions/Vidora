@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "vidora-dev",
+      "credentials": [{ "accessKey": "vidora", "secretKey": "vidora-dev-secret" }],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

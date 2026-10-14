@@ -8,6 +8,7 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/worker/package.json apps/worker/
 COPY packages/core/package.json packages/core/
 COPY packages/db/package.json packages/db/
+COPY packages/storage/package.json packages/storage/
 RUN pnpm install --frozen-lockfile --filter @vidora/worker... --filter vidora
 
 FROM base AS run
@@ -15,6 +16,7 @@ ENV NODE_ENV=production
 COPY --from=deps /app ./
 COPY packages/core packages/core
 COPY packages/db packages/db
+COPY packages/storage packages/storage
 COPY apps/worker apps/worker
 USER node
 WORKDIR /app/apps/worker

@@ -18,6 +18,15 @@ export const ID_PREFIX = {
   ledger: "led",
   providerRun: "prun",
   notification: "ntf",
+  upload: "upl",
+  brandKit: "bk",
+  // Better Auth models (see packages/db/src/auth-adapter.ts)
+  user: "usr",
+  session: "ses",
+  authAccount: "acc",
+  verification: "ver",
+  invitation: "inv",
+  authOther: "ba", // any other Better Auth model a plugin adds
 } as const
 
 export type IdKind = keyof typeof ID_PREFIX

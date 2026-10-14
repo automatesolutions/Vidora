@@ -1,10 +1,10 @@
 import { applyLedger, newId, type LedgerReason } from "@vidora/core"
 import { desc, eq, sql } from "drizzle-orm"
-import type { Tx } from "./client"
+import type { DbOrTx, Tx } from "./client"
 import { creditLedger, workspaces } from "./schema"
 
 /** Current balance from the newest ledger row. Call inside a transaction that holds the workspace lock. */
-export async function getBalance(tx: Tx, workspaceId: string) {
+export async function getBalance(tx: DbOrTx, workspaceId: string) {
   const [last] = await tx
     .select({ available: creditLedger.availableAfter, reserved: creditLedger.reservedAfter })
     .from(creditLedger)

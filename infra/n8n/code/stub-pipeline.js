@@ -1,7 +1,9 @@
 // n8n Code node: "Run stub pipeline" (run once for all items).
-// PHASE 0 STUB. It makes no real video. It proves the signed round trip:
+// STUB. It makes no real video. It proves the signed round trip:
 // claim → one signed callback per stage → job.completed (or job.failed on any error).
-// Phase 1 replaces this node with real stage nodes that call the provider gateway.
+// It reports the shared sample video and 6 frame candidates (seeded by `pnpm storage:seed`), so the review
+// page and the YouTube upload have a real file. n8n never touches the file itself.
+// GENERATION.md G2 replaces this node with real stage nodes that call the provider gateway.
 const crypto = require("crypto")
 
 const job = $("Verify signature").first().json.job
@@ -54,25 +56,38 @@ try {
     const stage = stages[i]
     const extra = { progress: Number(((i + 1) / stages.length).toFixed(2)), cost: [{ provider: "stub", units: 1, unit: "call", usd: 0 }] }
     if (stage === "script") {
+      // The task runner has no URL global, so take the host name with string methods.
+      const host = job.source_url ? String(job.source_url).split("//")[1].split("/")[0] : null
+      const subject = job.topic || (host ? `a product from ${host}` : null) || job.video_type || job.strategy.niche
       extra.data = {
-        title: `Stub video: ${job.topic || job.strategy.niche}`,
-        caption: "Stub caption from the Phase 0 pipeline.",
+        title: `Stub video: ${subject}`.slice(0, 100),
+        caption: `A ${job.strategy.target_length_sec} second short about ${subject}. Made by the stub pipeline.`,
         hashtags: ["#vidora", "#stub"],
       }
     }
     const r = await signedPost("/api/webhooks/n8n", event("job.stage_completed", stage, extra))
     if (r.status !== 200) throw new Error(`Callback for ${stage} returned ${r.status}: ${r.body}`)
     sent.push(stage)
-    await new Promise((resolve) => setTimeout(resolve, 200))
+    // Wizard jobs pace the stages so the progress page shows them; strategy jobs (smoke test) run fast.
+    await new Promise((resolve) => setTimeout(resolve, job.length_sec ? 1500 : 200))
   }
-  const prefix = `${job.workspace_id}/${job.job_id}/r${job.revision}`
+  // Sample files exist for 8 s and 15 s. Older strategy jobs (45 s) reuse the 15 s sample.
+  const len = job.length_sec === 8 ? 8 : 15
+  const frames = [0, 1, 2, 3, 4, 5].map((i) => ({
+    kind: "thumbnail",
+    ordinal: i,
+    storage_key: `samples/short-${len}s-frame-${i}.jpg`,
+    mime: "image/jpeg",
+    width: 360,
+    height: 640,
+  }))
   const done = await signedPost(
     "/api/webhooks/n8n",
     event("job.completed", "render", {
       progress: 1,
       assets: [
-        { kind: "final_video", storage_key: `${prefix}/final.mp4`, mime: "video/mp4", duration_ms: 42000, width: 1080, height: 1920 },
-        { kind: "thumbnail", storage_key: `${prefix}/thumb.jpg`, mime: "image/jpeg", width: 1080, height: 1920 },
+        { kind: "final_video", storage_key: `samples/short-${len}s.mp4`, mime: "video/mp4", duration_ms: len * 1000, width: 720, height: 1280 },
+        ...frames,
       ],
     })
   )

@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./brief": "./src/brief.ts",
+    "./credits": "./src/credits.ts",
+    "./youtube": "./src/youtube.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

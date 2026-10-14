@@ -1,12 +1,14 @@
 import { createDb } from "@vidora/db"
+import { createStorage, storageEnvFrom } from "@vidora/storage"
 import { PgBoss } from "pg-boss"
 import { dispatchQueuedJobs } from "./dispatch"
-import { env } from "./env"
+import { env, publishEnv } from "./env"
 import { log } from "./log"
+import { publishDuePosts } from "./publish"
 import { reconcileStuckJobs } from "./reconcile"
 
-// Vidora worker: dispatches generation to n8n and runs scheduled maintenance.
-// Phase 1 adds: publish-post, refresh-tokens, send-notifications queues.
+// Vidora worker: dispatches generation to n8n, posts approved videos, and runs scheduled maintenance.
+// Still to come in Phase 1: refresh-tokens and send-notifications queues.
 const db = createDb(env.DATABASE_URL, { max: 5 })
 const boss = new PgBoss({ connectionString: env.DATABASE_URL, schema: "pgboss" })
 boss.on("error", (err) => log.error("pg-boss error", { error: String(err) }))
@@ -31,6 +33,20 @@ async function dispatchLoop() {
   }
 }
 void dispatchLoop()
+
+const storage = createStorage(storageEnvFrom(process.env))
+const publishing = publishEnv()
+async function publishLoop() {
+  while (!stopping) {
+    try {
+      await publishDuePosts(db, storage, publishing)
+    } catch (err) {
+      log.error("publish loop error", { error: String(err) })
+    }
+    await new Promise((r) => setTimeout(r, env.PUBLISH_INTERVAL_MS))
+  }
+}
+void publishLoop()
 log.info("worker started", { n8n: env.N8N_WEBHOOK_URL, app: env.APP_URL })
 
 async function shutdown(signal: string) {

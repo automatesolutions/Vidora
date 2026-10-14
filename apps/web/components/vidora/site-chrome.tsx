@@ -1,5 +1,6 @@
 import Image from "next/image"
 import Link from "next/link"
+import { Button } from "@/components/ui/button"
 import { Logo } from "@/components/vidora/logo"
 import { isPlaceholder, SITE } from "@/lib/site"
 
@@ -12,6 +13,14 @@ export function SiteHeader() {
         <Link href="/" aria-label="Vidora home" className="inline-flex min-h-11 items-center rounded-sm">
           <Logo width={120} priority />
         </Link>
+        <nav aria-label="Account" className="flex items-center gap-2">
+          <Button asChild variant="text" size="sm">
+            <Link href="/sign-in">Sign in</Link>
+          </Button>
+          <Button asChild size="sm" className="max-sm:hidden">
+            <Link href="/sign-up">Create account</Link>
+          </Button>
+        </nav>
       </div>
     </header>
   )

@@ -1,39 +1,99 @@
 import {
   CREDIT_COST,
+  creditsForNewVideo,
   newId,
+  shortMaxCostUsd,
   transitionJob,
+  type BrandKit,
   type CallbackEvent,
   type GenerateRequest,
   type JobEvent,
+  type VideoBrief,
   type VideoTier,
 } from "@vidora/core"
 import { and, eq, inArray, lt, or, sql, isNull } from "drizzle-orm"
-import type { Db, Tx } from "./client"
+import type { Db, DbOrTx, Tx } from "./client"
 import { writeLedger } from "./credits"
-import { assets, contentStrategies, jobEvents, providerRuns, videoJobs, webhookEvents, type VideoJob } from "./schema"
+import { assets, contentStrategies, jobEvents, providerRuns, uploads, videoJobs, webhookEvents, workspaces, type VideoJob } from "./schema"
+import { inWorkspace } from "./scoped"
 
-type Actor = { type: "user" | "system" | "n8n"; id?: string | null }
+export type Actor = { type: "user" | "system" | "n8n"; id?: string | null }
 
 async function lockJob(tx: Tx, jobId: string): Promise<VideoJob | undefined> {
   const [job] = await tx.select().from(videoJobs).where(eq(videoJobs.id, jobId)).for("update")
   return job
 }
 
-/** Creates a queued job and reserves its credits. The dispatcher picks it up from `queued`. */
+/** Locks a job for a creator's action. Scoped: a job from another workspace looks like it doesn't exist. */
+export async function lockJobInWorkspace(tx: Tx, workspaceId: string, jobId: string): Promise<VideoJob | undefined> {
+  const [job] = await tx.select().from(videoJobs).where(inWorkspace(videoJobs, workspaceId, eq(videoJobs.id, jobId))).for("update")
+  return job
+}
+
+/** The list price of a job: its own base price, or the tier price for strategy-driven jobs. */
+export function jobBaseCredits(job: Pick<VideoJob, "creditsBase" | "tier">) {
+  return job.creditsBase > 0 ? job.creditsBase : CREDIT_COST[job.tier]
+}
+
+export class FreeVideoUnavailableError extends Error {
+  constructor() {
+    super("This workspace already used its free video.")
+    this.name = "FreeVideoUnavailableError"
+  }
+}
+
+/**
+ * Creates a queued job and reserves its credits. The dispatcher picks it up from `queued`.
+ * With a `brief` (create-video wizard), the price comes from the length, and the workspace's first video is free.
+ */
 export async function createJob(
   db: Db,
-  input: { workspaceId: string; strategyId?: string | null; tier?: VideoTier; topic?: string | null; actor: Actor }
+  input: {
+    workspaceId: string
+    strategyId?: string | null
+    tier?: VideoTier
+    topic?: string | null
+    actor: Actor
+    brief?: VideoBrief
+    brandKit?: BrandKit | null
+  }
 ) {
   return db.transaction(async (tx) => {
     const tier = input.tier ?? "short_standard"
-    const credits = CREDIT_COST[tier]
+    let credits = CREDIT_COST[tier]
+    let creditsBase = credits
+    let isFree = false
+    if (input.brief) {
+      // Lock the workspace so two tabs can't both claim the free video.
+      const [ws] = await tx
+        .select({ freeVideoUsedAt: workspaces.freeVideoUsedAt })
+        .from(workspaces)
+        .where(eq(workspaces.id, input.workspaceId))
+        .for("update")
+      if (!ws) throw new Error(`Workspace ${input.workspaceId} not found`)
+      const price = creditsForNewVideo({ lengthSec: input.brief.length_sec, freeVideoAvailable: ws.freeVideoUsedAt === null })
+      ;({ credits, creditsBase, isFree } = price)
+      if (isFree) await tx.update(workspaces).set({ freeVideoUsedAt: new Date() }).where(eq(workspaces.id, input.workspaceId))
+    }
     const id = newId("job")
     // Insert first so the ledger row can reference the job.
     const [job] = await tx
       .insert(videoJobs)
-      .values({ id, workspaceId: input.workspaceId, strategyId: input.strategyId ?? null, tier, topic: input.topic ?? null })
+      .values({
+        id,
+        workspaceId: input.workspaceId,
+        strategyId: input.strategyId ?? null,
+        tier,
+        topic: input.brief?.topic ?? input.topic ?? null,
+        brief: input.brief ?? {},
+        videoType: input.brief?.video_type ?? null,
+        lengthSec: input.brief?.length_sec ?? null,
+        creditsBase,
+        isFree,
+        brandKitSnapshot: input.brief?.use_brand_kit && input.brandKit ? input.brandKit : null,
+      })
       .returning()
-    await writeLedger(tx, { workspaceId: input.workspaceId, reason: "reserve", credits, jobId: id })
+    if (credits > 0) await writeLedger(tx, { workspaceId: input.workspaceId, reason: "reserve", credits, jobId: id })
     await tx.update(videoJobs).set({ creditsReserved: credits }).where(eq(videoJobs.id, id))
     await tx.insert(jobEvents).values({
       id: newId("jobEvent"),
@@ -44,6 +104,7 @@ export async function createJob(
       toStatus: "queued",
       actorType: input.actor.type,
       actorId: input.actor.id ?? null,
+      payload: { credits, is_free: isFree },
     })
     return { ...job!, creditsReserved: credits }
   })
@@ -74,8 +135,13 @@ export async function applyJobEvent(
       await writeLedger(tx, { workspaceId: job.workspaceId, reason: "release", credits: job.creditsReserved, jobId: job.id })
       patch.creditsReserved = 0
     }
+    // A canceled free video that was never delivered gives the free video back.
+    if (effect === "release_credits" && event === "cancel" && job.isFree && job.creditsCharged === 0 && job.revision === 1) {
+      await tx.update(workspaces).set({ freeVideoUsedAt: null }).where(eq(workspaces.id, job.workspaceId))
+    }
     if (effect === "reserve_credits") {
-      const credits = extra.reserveCredits ?? (event === "retry" ? CREDIT_COST[job.tier] : 0)
+      // Retrying a failed run costs the same as the first try (nothing for the free video).
+      const credits = extra.reserveCredits ?? (event === "retry" && !job.isFree ? jobBaseCredits(job) : 0)
       if (credits > 0) {
         await writeLedger(tx, { workspaceId: job.workspaceId, reason: "reserve", credits, jobId: job.id })
         patch.creditsReserved = (patch.creditsReserved ?? job.creditsReserved) + credits
@@ -148,6 +214,40 @@ export async function buildGenerateRequest(db: Db, job: VideoJob, callbackUrl: s
   const [strategy] = job.strategyId
     ? await db.select().from(contentStrategies).where(eq(contentStrategies.id, job.strategyId))
     : []
+  const base = baseGenerateRequest(job, strategy, callbackUrl)
+  const brief = job.brief as Partial<VideoBrief>
+  if (!brief.video_type || !brief.length_sec) return base
+
+  // Wizard job: pass the choices and the files (storage keys only; the provider gateway reads them from R2).
+  const inputAssets: NonNullable<GenerateRequest["input_assets"]> = []
+  if (brief.photo_upload_id) {
+    const [photo] = await db
+      .select()
+      .from(uploads)
+      .where(inWorkspace(uploads, job.workspaceId, eq(uploads.id, brief.photo_upload_id), eq(uploads.status, "ready")))
+    if (photo) inputAssets.push({ kind: "photo", storage_key: photo.storageKey, mime: photo.mime as "image/jpeg" })
+  }
+  return {
+    ...base,
+    strategy: { ...base.strategy, language: brief.language ?? base.strategy.language, target_length_sec: brief.length_sec },
+    topic: brief.topic ?? null,
+    limits: { max_cost_usd: shortMaxCostUsd(brief.length_sec), max_clip_seconds: brief.length_sec },
+    video_type: brief.video_type,
+    look: brief.look,
+    voice: brief.voice,
+    captions_style: brief.captions_style,
+    length_sec: brief.length_sec,
+    source_url: brief.source_url ?? null,
+    brand_kit: (job.brandKitSnapshot as BrandKit | null) ?? null,
+    input_assets: inputAssets,
+  }
+}
+
+function baseGenerateRequest(
+  job: VideoJob,
+  strategy: typeof contentStrategies.$inferSelect | undefined,
+  callbackUrl: string
+): GenerateRequest {
   return {
     job_id: job.id,
     revision: job.revision,
@@ -275,6 +375,21 @@ export async function applyCallback(db: Db, e: CallbackEvent): Promise<{ outcome
       return finish("applied", r.effects)
     }
     await tx.update(videoJobs).set(patch).where(eq(videoJobs.id, job.id))
+    // Stage progress isn't a status change, but the progress page reads it from job_events.
+    if (e.stage) {
+      await tx.insert(jobEvents).values({
+        id: newId("jobEvent"),
+        workspaceId: job.workspaceId,
+        jobId: job.id,
+        revision: e.revision,
+        event: e.type === "job.stage_started" ? "stage_started" : "stage_completed",
+        fromStatus: job.status,
+        toStatus: job.status,
+        actorType: "n8n",
+        actorId: e.execution_id,
+        payload: { stage: e.stage, progress: e.progress ?? null, event_id: e.event_id },
+      })
+    }
     return finish("applied")
   })
 }

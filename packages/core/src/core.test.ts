@@ -127,10 +127,10 @@ describe("credits", () => {
   })
 
   it("makes the first two change requests free and prices the rest by stage", () => {
-    expect(changeRequestCost("short_standard", "script", 0)).toBe(0)
-    expect(changeRequestCost("short_standard", "script", 1)).toBe(0)
-    expect(changeRequestCost("short_standard", "script", 2)).toBe(20) // reruns ~98% of the pipeline
-    expect(changeRequestCost("short_standard", "thumbnail", 2)).toBe(3) // thumbnail + render = 12%
+    expect(changeRequestCost(20, "script", 0)).toBe(0)
+    expect(changeRequestCost(20, "script", 1)).toBe(0)
+    expect(changeRequestCost(20, "script", 2)).toBe(20) // reruns ~98% of the pipeline
+    expect(changeRequestCost(20, "thumbnail", 2)).toBe(3) // thumbnail + render = 12%
   })
 })
 
