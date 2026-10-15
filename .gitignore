@@ -10,3 +10,7 @@ coverage/
 .DS_Store
 .vercel
 .turbo
+e2e/screens/
+test-results/
+playwright-report/
+test-videos/

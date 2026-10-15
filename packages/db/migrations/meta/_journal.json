@@ -5,8 +5,22 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1791375380910,
-      "tag": "0000_init",
+      "when": 1791993626515,
+      "tag": "0000_autoshorts_init",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792038092734,
+      "tag": "0001_higgsfield_connect",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792047076485,
+      "tag": "0002_campaigns_runs",
       "breakpoints": true
     }
   ]

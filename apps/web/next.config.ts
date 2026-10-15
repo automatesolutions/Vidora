@@ -9,9 +9,14 @@ try {
 }
 
 const nextConfig: NextConfig = {
+  // Standalone output (Docker / Cloud Run) only when asked: on Windows it needs symlink rights.
+  ...(process.env.NEXT_OUTPUT === "standalone" && {
+    output: "standalone",
+    outputFileTracingRoot: path.resolve(process.cwd(), "../.."),
+  }),
   cacheComponents: true,
   partialPrefetching: true,
-  transpilePackages: ["@vidora/core", "@vidora/db"],
+  transpilePackages: ["@vidora/core", "@vidora/db", "@vidora/providers"],
   serverExternalPackages: ["postgres"],
   turbopack: {
     rules: {

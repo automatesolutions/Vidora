@@ -2,7 +2,7 @@ import { CalendarClock, CircleCheck, Link2, SlidersHorizontal } from "lucide-rea
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 
-// Placeholder home until the Phase 1 landing page. Google's OAuth review needs the homepage to say what
+// Home until the full Phase 1 landing page. The hero sends new creators to sign-up, returning ones to sign-in. Google's OAuth review needs the homepage to say what
 // the app does and how it uses account access, with a link to the privacy policy. This page does both.
 const STEPS = [
   { icon: Link2, title: "Connect your channels", body: "Sign in with YouTube or TikTok. We ask only for permission to post the videos you approve." },
@@ -15,19 +15,36 @@ export default function Home() {
   return (
     <>
       <section className="safe-x mx-auto flex w-full max-w-[1280px] flex-col gap-6 py-16 md:px-6 md:py-24">
-        <p className="font-display text-eyebrow text-primary-text uppercase">Coming soon</p>
+        <p className="font-display text-eyebrow text-primary-text uppercase">Your first video is free</p>
         <h1 className="max-w-[16ch] font-display text-display-xl max-md:text-display-lg">
           Videos for your channels. You approve every one.
         </h1>
         <p className="max-w-[52ch] text-body-lg text-muted-foreground">
           Vidora makes short and long videos for YouTube and TikTok, then posts only the ones you approve.
         </p>
+        <div className="flex flex-wrap gap-3">
+          <Button asChild>
+            <Link href="/sign-up">Make your first video</Link>
+          </Button>
+          <Button asChild variant="tertiary">
+            <Link href="/sign-in">Sign in</Link>
+          </Button>
+        </div>
         {process.env.NODE_ENV !== "production" && (
-          <div>
-            <Button asChild variant="tertiary">
-              <Link href="/design-system">Open the design system</Link>
-            </Button>
-          </div>
+          <p className="text-body-sm text-muted-foreground">
+            Testing locally?{" "}
+            <a href="/api/dev/login" className="text-primary-text underline underline-offset-4 hover:no-underline">
+              Open the app without signing in
+            </a>
+          </p>
+        )}
+        {(process.env.NODE_ENV !== "production" || process.env.ENABLE_DESIGN_SYSTEM === "true") && (
+          <p className="text-body-sm text-muted-foreground">
+            Building Vidora?{" "}
+            <Link href="/design-system" className="text-primary-text underline underline-offset-4 hover:no-underline">
+              Open the design system
+            </Link>
+          </p>
         )}
       </section>
 

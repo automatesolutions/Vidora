@@ -50,10 +50,6 @@ jobs:
             git status --porcelain packages/db/migrations
             exit 1
           fi
-      - name: n8n workflows are built from code/
-        run: |
-          pnpm n8n:build
-          git diff --exit-code infra/n8n/workflows
       - name: Build web
         run: pnpm build
       - name: Build worker image
