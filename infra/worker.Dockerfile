@@ -12,15 +12,18 @@ COPY packages/core/package.json packages/core/
 COPY packages/db/package.json packages/db/
 COPY packages/storage/package.json packages/storage/
 COPY packages/providers/package.json packages/providers/
+COPY packages/director/package.json packages/director/
 RUN pnpm install --frozen-lockfile --filter @vidora/worker... --filter vidora
 
 FROM base AS run
-ENV NODE_ENV=production
+ENV NODE_ENV=production \
+    FFMPEG_PATH=/usr/bin/ffmpeg
 COPY --from=deps /app ./
 COPY packages/core packages/core
 COPY packages/db packages/db
 COPY packages/storage packages/storage
 COPY packages/providers packages/providers
+COPY packages/director packages/director
 COPY apps/worker apps/worker
 USER node
 WORKDIR /app/apps/worker

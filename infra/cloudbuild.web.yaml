@@ -1,5 +1,6 @@
 # Builds the web image and deploys it to Cloud Run. Run from the repo root: pnpm deploy:web
-# Secrets and env vars are set once on the service (README "Deploy") and kept across deploys.
+# Secrets come from Secret Manager (README "Deploy"). Optional ones (Google OAuth, Resend) are added to the
+# service once with `gcloud run services update --update-secrets` and are kept across deploys.
 substitutions:
   _REGION: asia-southeast1
   _SERVICE: vidora-web
@@ -49,4 +50,9 @@ steps:
       - --memory=512Mi
       - --min-instances=0
       - --max-instances=3
-      - --update-env-vars=NEXT_PUBLIC_APP_URL=${_APP_URL}
+      # Cloud SQL has a private IP only; reach it through the default VPC.
+      - --network=default
+      - --subnet=default
+      - --vpc-egress=private-ranges-only
+      - --update-env-vars=NEXT_PUBLIC_APP_URL=${_APP_URL},APP_URL=${_APP_URL},STORAGE_ENDPOINT=https://storage.googleapis.com,STORAGE_BUCKET=vidora-media-510913,STORAGE_REGION=auto
+      - --update-secrets=DATABASE_URL=database-url:latest,BETTER_AUTH_SECRET=better-auth-secret:latest,TOKEN_ENCRYPTION_KEYS=token-encryption-keys:latest,OAUTH_STATE_SECRET=oauth-state-secret:latest,HIGGSFIELD_WEBHOOK_SECRET=higgsfield-webhook-secret:latest,STORAGE_ACCESS_KEY_ID=storage-access-key-id:latest,STORAGE_SECRET_ACCESS_KEY=storage-secret-access-key:latest

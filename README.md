@@ -10,11 +10,11 @@ Set up a campaign once. On every scheduled run, AutoShorts Studio makes a new Sh
 
 ```
 apps/web            Next.js: UI, auth, YouTube OAuth, Higgsfield webhook   → Cloud Run (GCP)
-apps/worker         BullMQ: generation engine, model registry refresh      → VPS (Docker)
+apps/worker         BullMQ: generation engine, model registry refresh      → Compute Engine VM (GCP)
 packages/core       Pure rules: generation states, model input, budget, schedules (tested)
 packages/providers  VideoProvider interface, HiggsfieldProvider, docs catalog reader
 packages/db         Drizzle schema, migrations, generation and spend operations
-packages/storage    S3 client (R2 in production, SeaweedFS locally)
+packages/storage    S3 client (Cloud Storage in production, SeaweedFS locally)
 infra               docker compose (Redis, dev Postgres, dev storage, worker)
 scripts             brand assets, contrast check, copy lint
 ```
@@ -43,29 +43,36 @@ pnpm brand                    # regenerate brand assets from assets/vidora-logo.
 pnpm launch-check             # what still blocks a public launch (placeholders, legal review, platform applications)
 ```
 
-## Deploy (web → Cloud Run)
+## Deploy (GCP)
 
-GCP project `vidora-510913`, region `asia-southeast1`. Live at https://vidora-web-657635713769.asia-southeast1.run.app
+Everything runs in GCP project `vidora-510913`, region `asia-southeast1`.
+Live at https://vidora-web-657635713769.asia-southeast1.run.app
 
 ```bash
-pnpm deploy:web               # Cloud Build: builds infra/web.Dockerfile, pushes to Artifact Registry, deploys
+pnpm deploy:web               # Cloud Build → Artifact Registry → Cloud Run
+pnpm deploy:worker            # Cloud Build → Artifact Registry, then reruns the VM's startup script
 ```
 
-Secrets live in Secret Manager and are mounted as env vars; the runtime service account is `vidora-web@vidora-510913.iam.gserviceaccount.com`.
-
-| Env var | Source |
+| Piece | Where |
 |---|---|
-| `DATABASE_URL` | secret `database-url` (Neon pooled URL), added once Neon exists, see below |
-| `NEXT_PUBLIC_APP_URL` | build arg + env, `_APP_URL` in `infra/cloudbuild.web.yaml` |
-| `ENABLE_DESIGN_SYSTEM` | build arg, `_ENABLE_DESIGN_SYSTEM` in `infra/cloudbuild.web.yaml` (set `"false"` to hide `/design-system`) |
+| Web app | Cloud Run `vidora-web` (service account `vidora-web@`), reaches the database over the default VPC |
+| Worker + Redis | VM `vidora-worker` (e2-small, zone `asia-southeast1-b`, no public IP, internet through Cloud NAT `vidora-nat`). `infra/gcp/worker-startup.sh` writes `/etc/vidora/worker.env` from Secret Manager, runs migrations, and (re)starts Redis and the worker on every boot and deploy |
+| Database | Cloud SQL Postgres 17 `vidora-db` (private IP only), database and user `vidora` |
+| Files | Cloud Storage bucket `vidora-media-510913` (private, CORS for the app URL), used through its S3 API with HMAC keys of `vidora-storage@` |
 
-Add the database (once):
+Secrets (Secret Manager): `database-url`, `db-password`, `better-auth-secret`, `token-encryption-keys`,
+`oauth-state-secret`, `higgsfield-webhook-secret`, `storage-access-key-id`, `storage-secret-access-key`,
+`elevenlabs-api-key`. Optional ones the worker picks up when they exist: `anthropic-api-key`,
+`google-oauth-client-id`, `google-oauth-client-secret`.
+
+Add or rotate a secret, then redeploy whatever reads it:
 
 ```bash
-printf '%s' 'postgres://...neon.tech/vidora?sslmode=require' | gcloud secrets create database-url --data-file=-
-gcloud secrets add-iam-policy-binding database-url --member=serviceAccount:vidora-web@vidora-510913.iam.gserviceaccount.com --role=roles/secretmanager.secretAccessor
-gcloud run services update vidora-web --region asia-southeast1 --update-secrets DATABASE_URL=database-url:latest
-DATABASE_URL='postgres://...' pnpm db:migrate   # use the direct (non-pooled) URL for migrations
+printf '%s' 'sk-ant-...' | gcloud secrets create anthropic-api-key --data-file=-    # new
+printf '%s' '...' | gcloud secrets versions add better-auth-secret --data-file=-     # rotate
+# web only: attach a new secret to the service once (kept across deploys)
+gcloud run services update vidora-web --region asia-southeast1 --update-secrets RESEND_API_KEY=resend-api-key:latest
 ```
 
-Rotate a secret with `gcloud secrets versions add <name> --data-file=-`, then redeploy.
+Worker logs: `gcloud compute ssh vidora-worker --zone asia-southeast1-b --tunnel-through-iap --command "sudo docker logs -f vidora-worker"`.
+`/design-system` is on in production (`_ENABLE_DESIGN_SYSTEM` in `infra/cloudbuild.web.yaml`; set `"false"` to hide it).

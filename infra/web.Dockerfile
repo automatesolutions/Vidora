@@ -11,6 +11,7 @@ COPY apps/web/package.json apps/web/
 COPY packages/core/package.json packages/core/
 COPY packages/db/package.json packages/db/
 COPY packages/storage/package.json packages/storage/
+COPY packages/providers/package.json packages/providers/
 RUN pnpm install --frozen-lockfile --filter web...
 
 FROM base AS build
@@ -24,6 +25,7 @@ COPY --from=deps /app ./
 COPY packages/core packages/core
 COPY packages/db packages/db
 COPY packages/storage packages/storage
+COPY packages/providers packages/providers
 COPY apps/web apps/web
 RUN pnpm --filter web build
 

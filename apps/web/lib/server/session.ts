@@ -18,7 +18,9 @@ export type AppSession = {
 }
 
 export const getAppSession = cache(async (): Promise<AppSession | null> => {
-  const s = await getAuth().api.getSession({ headers: await headers() })
+  // headers() first: during prerendering it stops here, before getAuth() needs DATABASE_URL.
+  const h = await headers()
+  const s = await getAuth().api.getSession({ headers: h })
   if (!s) return null
   const active = (s.session as { activeOrganizationId?: string | null }).activeOrganizationId
   const m = await getMembership(getDb(), s.user.id, active)

@@ -19,11 +19,11 @@ wizard is preserved at commit `a348446` on `main`).
 
 ```
 apps/web            Next.js: UI, auth, YouTube OAuth, Higgsfield webhook          → Cloud Run
-apps/worker         BullMQ workers: generation engine, model refresh, (step 2) runs and uploads → VPS
+apps/worker         BullMQ workers: generation engine, model refresh, (step 2) runs and uploads → Compute Engine VM
 packages/core       Pure rules: generation states, retries, model input, budget, schedules, YouTube helpers
 packages/providers  VideoProvider interface + HiggsfieldProvider + docs catalog reader
 packages/db         Drizzle schema, migrations, generation/spend/credential/model operations
-packages/storage    S3 client (Cloudflare R2 in production, SeaweedFS locally)
+packages/storage    S3 client (Cloud Storage in production, SeaweedFS locally)
 infra               docker compose: Postgres (dev), Redis (BullMQ), storage (dev), worker (prod)
 ```
 
