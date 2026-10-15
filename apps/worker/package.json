@@ -7,13 +7,19 @@
     "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts",
     "start": "tsx --env-file-if-exists=../../.env src/index.ts",
     "typecheck": "tsc --noEmit",
-    "smoke": "tsx --env-file-if-exists=../../.env src/smoke.ts"
+    "models:refresh": "tsx --env-file-if-exists=../../.env src/models-refresh.ts",
+    "test": "vitest run",
+    "video:test": "tsx --env-file-if-exists=../../.env src/test-video.ts"
   },
   "dependencies": {
     "@vidora/core": "workspace:^",
     "@vidora/db": "workspace:^",
+    "@vidora/director": "workspace:^",
+    "@vidora/providers": "workspace:^",
     "@vidora/storage": "workspace:^",
-    "pg-boss": "^12.37.0",
+    "bullmq": "^5.81.5",
+    "ffmpeg-static": "^5",
+    "ioredis": "^5.11.1",
     "tsx": "^4.23.15"
   },
   "devDependencies": {

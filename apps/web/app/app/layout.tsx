@@ -1,11 +1,8 @@
 import Link from "next/link"
 import { Suspense } from "react"
-import { Coins } from "lucide-react"
-import { getCredits, getDb, listQueue } from "@vidora/db"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AppNav, SignOutButton } from "@/components/vidora/app-nav"
 import { Logo } from "@/components/vidora/logo"
-import { creditsLabel } from "@/lib/labels"
 import { requireSession } from "@/lib/server/session"
 
 // Signed-in app chrome. The session is read inside Suspense (cacheComponents), so the frame renders instantly.
@@ -17,7 +14,7 @@ export default function AppLayout({ children }: LayoutProps<"/app">) {
       </a>
       <header className="border-b border-border bg-background">
         <div className="safe-x mx-auto flex w-full max-w-[1280px] flex-wrap items-center gap-x-6 gap-y-2 py-2 md:px-6">
-          <Link href="/app/videos" aria-label="Vidora, your videos" className="inline-flex min-h-11 items-center rounded-sm">
+          <Link href="/app" aria-label="AutoShorts Studio home" className="inline-flex min-h-11 items-center rounded-sm">
             <Logo width={104} priority />
           </Link>
           <Suspense fallback={<Skeleton className="h-11 w-64 bg-muted" />}>
@@ -33,19 +30,13 @@ export default function AppLayout({ children }: LayoutProps<"/app">) {
 }
 
 async function HeaderSession() {
-  const s = await requireSession()
-  const db = getDb()
-  const [credits, queue] = await Promise.all([getCredits(db, s.workspaceId), listQueue(db, s.workspaceId, 99)])
+  await requireSession()
   return (
     <>
       <div className="order-last w-full sm:order-none sm:w-auto sm:flex-1">
-        <AppNav queueCount={queue.length} />
+        <AppNav />
       </div>
       <div className="ml-auto flex items-center gap-2">
-        <span className="tabular inline-flex min-h-11 items-center gap-1.5 text-body-sm text-muted-foreground">
-          <Coins aria-hidden className="size-5" strokeWidth={1.75} />
-          {creditsLabel(credits.available)}
-        </span>
         <SignOutButton />
       </div>
     </>

@@ -5,9 +5,9 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./brief": "./src/brief.ts",
-    "./credits": "./src/credits.ts",
-    "./youtube": "./src/youtube.ts"
+    "./youtube": "./src/youtube.ts",
+    "./campaign": "./src/campaign.ts",
+    "./schedule": "./src/schedule.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -15,5 +15,8 @@
   },
   "dependencies": {
     "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.3"
   }
 }

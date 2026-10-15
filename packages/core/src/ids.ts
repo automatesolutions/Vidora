@@ -1,24 +1,27 @@
 import { randomBytes } from "node:crypto"
 
 // Prefixed, time-sortable IDs (ULID layout: 48-bit ms time + 80 random bits, Crockford base32).
-// Example: job_01J9ZQ3K8V7W2M4N6P8R0T2V4X
+// Example: gen_01J9ZQ3K8V7W2M4N6P8R0T2V4X
 const ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
 export const ID_PREFIX = {
   workspace: "ws",
   member: "mem",
-  account: "acct",
-  strategy: "strat",
-  job: "job",
-  jobEvent: "jev",
+  account: "acct", // YouTube connection
+  credential: "cred", // provider API key (Higgsfield)
+  campaign: "cmp",
+  schedule: "sch",
+  run: "run",
+  runEvent: "rev",
+  generation: "gen",
+  video: "vid",
+  fingerprint: "vfp",
   asset: "ast",
-  approval: "apr",
-  post: "post",
-  subscription: "sub",
-  ledger: "led",
-  providerRun: "prun",
-  notification: "ntf",
   upload: "upl",
+  uploadLog: "ulog",
+  spend: "spd",
+  snapshot: "snap",
+  notification: "ntf",
   brandKit: "bk",
   // Better Auth models (see packages/db/src/auth-adapter.ts)
   user: "usr",

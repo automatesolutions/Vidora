@@ -1,9 +1,10 @@
-import { newId, BRAND_COLORS_MAX, type BrandKit } from "@vidora/core"
+import { newId } from "@vidora/core"
 import { eq } from "drizzle-orm"
 import type { DbOrTx } from "./client"
-import { brandKits, uploads } from "./schema"
+import { uploads } from "./schema"
 import { inWorkspace } from "./scoped"
 
+// Product photos (input) and logos. Browser → storage with a signed PUT, then the server checks the file.
 export const UPLOAD_RULES = {
   input: { maxBytes: 15 * 1024 * 1024, mimes: ["image/jpeg", "image/png", "image/webp"] },
   // No SVG: a logo is served back to browsers, and SVG can carry scripts.
@@ -53,41 +54,4 @@ export async function getUpload(db: DbOrTx, workspaceId: string, id: string) {
 
 export async function setUploadStatus(db: DbOrTx, workspaceId: string, id: string, status: "ready" | "rejected") {
   await db.update(uploads).set({ status }).where(inWorkspace(uploads, workspaceId, eq(uploads.id, id)))
-}
-
-// ── Brand kit ────────────────────────────────────────────────────────────────
-
-export async function getBrandKit(db: DbOrTx, workspaceId: string) {
-  const [kit] = await db.select().from(brandKits).where(inWorkspace(brandKits, workspaceId))
-  return kit ?? null
-}
-
-export async function saveBrandKit(
-  db: DbOrTx,
-  workspaceId: string,
-  input: { logoUploadId: string | null; colors: string[]; endCardText: string | null }
-) {
-  if (input.logoUploadId) {
-    const logo = await getUpload(db, workspaceId, input.logoUploadId)
-    if (!logo || logo.status !== "ready" || logo.purpose !== "logo") throw new UploadRejectedError("Upload the logo again.")
-  }
-  const values = {
-    logoUploadId: input.logoUploadId,
-    colors: input.colors.slice(0, BRAND_COLORS_MAX).map((c) => c.toUpperCase()),
-    endCardText: input.endCardText?.trim() || null,
-  }
-  const [kit] = await db
-    .insert(brandKits)
-    .values({ id: newId("brandKit"), workspaceId, ...values })
-    .onConflictDoUpdate({ target: brandKits.workspaceId, set: values })
-    .returning()
-  return kit!
-}
-
-/** The brand kit in the shape the pipeline reads (storage keys only). Null when the workspace has none. */
-export async function brandKitForPipeline(db: DbOrTx, workspaceId: string): Promise<BrandKit | null> {
-  const kit = await getBrandKit(db, workspaceId)
-  if (!kit) return null
-  const logo = kit.logoUploadId ? await getUpload(db, workspaceId, kit.logoUploadId) : null
-  return { logo_key: logo?.status === "ready" ? logo.storageKey : null, colors: kit.colors, end_card_text: kit.endCardText }
 }

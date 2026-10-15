@@ -1,76 +1,84 @@
-import { tokenKeysFromEnv, type Visibility } from "@vidora/core"
-import { claimDuePosts, finishPost, readTokens, saveRefreshedAccessToken, type ClaimedPost, type Db, type PublishOutcome } from "@vidora/db"
-import type { Storage } from "@vidora/storage"
+import type { TokenKey } from "@vidora/core"
+import { logUpload, markAccountNeedsReauth, readTokens, saveRefreshedAccessToken, type ConnectedAccount, type Db } from "@vidora/db"
 import { log } from "./log"
-import { AuthError, refreshAccessToken, uploadShort } from "./youtube"
+import { AuthError, refreshAccessToken, uploadShort, type PublishOutcome } from "./youtube"
 
-// Posts approved videos when their time comes. Runs in the worker loop (docs/PLAN.md: publishing happens
-// in the Vidora worker, never in n8n).
+// Uploads one finished Short to a connected YouTube channel as private with a publish time.
+// A test channel (Connections without Google credentials, ALLOW_FAKE_YOUTUBE) simulates the upload.
 
-export type PublishEnv = {
-  tokenKeys: ReturnType<typeof tokenKeysFromEnv>
+export type PublishInput = {
+  workspaceId: string
+  videoId: string
+  account: ConnectedAccount
+  video: Uint8Array
+  cover: Uint8Array | null
+  title: string
+  description: string
+  tags: string[]
+  madeForKids: boolean
+  publishAt: Date
+}
+
+export type PublishDeps = {
+  db: Db
+  tokenKeys: readonly TokenKey[]
   google: { clientId: string; clientSecret: string } | null
   audited: boolean
+  fetch?: typeof fetch
 }
 
-async function bytes(storage: Storage, key: string) {
-  const obj = await storage.get(key)
-  return obj.Body ? obj.Body.transformToByteArray() : new Uint8Array()
-}
+// videos.insert costs about 1,600 quota units; thumbnails.set about 50 (YouTube Data API v3).
+const INSERT_UNITS = 1600
 
-export async function publishOne(db: Db, storage: Storage, env: PublishEnv, c: ClaimedPost, f: typeof fetch = fetch): Promise<PublishOutcome> {
-  const opts = c.post.platformOptions as { visibility?: Visibility; madeForKids?: boolean }
-  if (c.account.status !== "active") return { ok: false, kind: "auth", error: "Your YouTube login expired." }
-  if (!c.videoKey) return { ok: false, kind: "permanent", error: "The video file is missing." }
-
-  // Local dev: the fake channel from "Connect YouTube" without Google credentials. Nothing is uploaded.
-  if ((c.account.platformMeta as { fake?: boolean }).fake) {
-    if (process.env.NODE_ENV === "production") return { ok: false, kind: "permanent", error: "Test channels can't post." }
-    log.info("simulated upload to fake channel", { postId: c.post.id })
-    return { ok: true, externalPostId: `fake_${c.post.id}`, externalUrl: null }
+export async function publishToYouTube(deps: PublishDeps, p: PublishInput): Promise<PublishOutcome> {
+  const f = deps.fetch ?? fetch
+  if ((p.account.platformMeta as { fake?: boolean }).fake) {
+    const id = `fake_${p.videoId.slice(-10)}`
+    await logUpload(deps.db, { workspaceId: p.workspaceId, videoId: p.videoId, accountId: p.account.id, step: "insert", ok: true, quotaUnits: 0, youtubeVideoId: id, error: "simulated (test channel)" })
+    log.info("youtube upload simulated", { videoId: p.videoId, publishAt: p.publishAt.toISOString() })
+    return { ok: true, externalPostId: id, externalUrl: `https://youtube.com/shorts/${id}` }
   }
-  if (!env.google) return { ok: false, kind: "retryable", error: "Google OAuth isn't configured on the worker." }
 
-  const tokens = readTokens(c.account, env.tokenKeys)
-  let accessToken = tokens.accessToken
-  const refreshToken = tokens.refreshToken
-  const expiresSoon = !c.account.accessExpiresAt || c.account.accessExpiresAt.getTime() < Date.now() + 120_000
-  if (expiresSoon) {
-    if (!refreshToken) return { ok: false, kind: "auth", error: "Your YouTube login expired." }
-    try {
-      const fresh = await refreshAccessToken(f, env.google, refreshToken)
-      accessToken = fresh.accessToken
-      await saveRefreshedAccessToken(db, env.tokenKeys, c.account.id, fresh.accessToken, fresh.expiresAt)
-    } catch (err) {
-      if (err instanceof AuthError) return { ok: false, kind: "auth", error: err.message }
-      return { ok: false, kind: "retryable", error: String(err) }
+  let { accessToken } = readTokens(p.account, deps.tokenKeys)
+  const { refreshToken } = readTokens(p.account, deps.tokenKeys)
+  try {
+    if (!p.account.accessExpiresAt || p.account.accessExpiresAt.getTime() - Date.now() < 5 * 60_000) {
+      if (!deps.google || !refreshToken) throw new AuthError("Your YouTube login expired.")
+      const r = await refreshAccessToken(f, deps.google, refreshToken)
+      accessToken = r.accessToken
+      await saveRefreshedAccessToken(deps.db, deps.tokenKeys, p.account.id, r.accessToken, r.expiresAt)
     }
+  } catch (err) {
+    if (err instanceof AuthError) {
+      await markAccountNeedsReauth(deps.db, p.account.id)
+      await logUpload(deps.db, { workspaceId: p.workspaceId, videoId: p.videoId, accountId: p.account.id, step: "refresh_token", ok: false, error: err.message })
+      return { ok: false, kind: "auth", error: err.message }
+    }
+    return { ok: false, kind: "retryable", error: (err as Error).message }
   }
 
-  return uploadShort(f, {
+  const outcome = await uploadShort(f, {
     accessToken,
-    title: c.post.title || c.job.title || "New Short",
-    description: c.post.caption ?? "",
-    visibility: opts.visibility ?? "private",
-    madeForKids: opts.madeForKids ?? false,
-    audited: env.audited,
-    video: await bytes(storage, c.videoKey),
-    cover: c.coverKey ? await bytes(storage, c.coverKey).catch(() => null) : null,
+    title: p.title,
+    description: p.description,
+    tags: p.tags,
+    visibility: "private",
+    madeForKids: p.madeForKids,
+    audited: deps.audited,
+    video: p.video,
+    cover: p.cover,
+    publishAt: p.publishAt,
   })
-}
-
-/** One pass: claim due posts, upload each, record the result. Returns how many it handled. */
-export async function publishDuePosts(db: Db, storage: Storage, env: PublishEnv, f: typeof fetch = fetch) {
-  const claimed = await claimDuePosts(db)
-  for (const c of claimed) {
-    let outcome: PublishOutcome
-    try {
-      outcome = await publishOne(db, storage, env, c, f)
-    } catch (err) {
-      outcome = { ok: false, kind: "retryable", error: String(err).slice(0, 500) }
-    }
-    const jobStatus = await finishPost(db, c.post.id, outcome)
-    log.info("publish attempt", { postId: c.post.id, jobId: c.job.id, ok: outcome.ok, ...(outcome.ok ? {} : { kind: outcome.kind, error: outcome.error }), jobStatus })
-  }
-  return claimed.length
+  await logUpload(deps.db, {
+    workspaceId: p.workspaceId,
+    videoId: p.videoId,
+    accountId: p.account.id,
+    step: "insert",
+    ok: outcome.ok,
+    quotaUnits: INSERT_UNITS,
+    youtubeVideoId: outcome.ok ? outcome.externalPostId : null,
+    error: outcome.ok ? null : outcome.error,
+  })
+  if (!outcome.ok && outcome.kind === "auth") await markAccountNeedsReauth(deps.db, p.account.id)
+  return outcome
 }

@@ -49,5 +49,4 @@ steps:
       - --memory=512Mi
       - --min-instances=0
       - --max-instances=3
-      - --update-secrets=N8N_TO_VIDORA_SECRET=n8n-to-vidora-secret:latest
       - --update-env-vars=NEXT_PUBLIC_APP_URL=${_APP_URL}

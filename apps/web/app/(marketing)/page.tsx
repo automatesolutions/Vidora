@@ -30,6 +30,14 @@ export default function Home() {
             <Link href="/sign-in">Sign in</Link>
           </Button>
         </div>
+        {process.env.NODE_ENV !== "production" && (
+          <p className="text-body-sm text-muted-foreground">
+            Testing locally?{" "}
+            <a href="/api/dev/login" className="text-primary-text underline underline-offset-4 hover:no-underline">
+              Open the app without signing in
+            </a>
+          </p>
+        )}
         {(process.env.NODE_ENV !== "production" || process.env.ENABLE_DESIGN_SYSTEM === "true") && (
           <p className="text-body-sm text-muted-foreground">
             Building Vidora?{" "}

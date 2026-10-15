@@ -1,21 +1,22 @@
-# Vidora
+# AutoShorts Studio
 
-Vidora makes videos for YouTube and TikTok channels and posts only the ones you approve.
+Set up a campaign once. On every scheduled run, AutoShorts Studio makes a new Short with your own Higgsfield API key and schedules it on your YouTube channel.
 
-- Plan and status: [`docs/PLAN.md`](docs/PLAN.md)
+- Architecture and status: [`docs/AUTOSHORTS.md`](docs/AUTOSHORTS.md) (the earlier Vidora plan: [`docs/PLAN.md`](docs/PLAN.md))
 - Design rules: [`.claude/skills/vidora-design/SKILL.md`](.claude/skills/vidora-design/SKILL.md) (source of truth: [`DESIGN.md`](DESIGN.md))
-- n8n workflows: [`infra/n8n/README.md`](infra/n8n/README.md)
 - Google and TikTok applications: [`docs/platform-applications.md`](docs/platform-applications.md)
 
 ## Layout
 
 ```
-apps/web        Next.js app (UI, API, n8n callbacks)        → Cloud Run (GCP)
-apps/worker     Dispatch to n8n, reconciler, pg-boss jobs    → VPS (Docker)
-packages/core   State machine, credits, signing, contracts (pure, tested)
-packages/db     Drizzle schema, migrations, job operations
-infra           docker compose (n8n queue mode, Redis, dev Postgres), n8n workflows
-scripts         brand assets, contrast check, copy lint
+apps/web            Next.js: UI, auth, YouTube OAuth, Higgsfield webhook   → Cloud Run (GCP)
+apps/worker         BullMQ: generation engine, model registry refresh      → VPS (Docker)
+packages/core       Pure rules: generation states, model input, budget, schedules (tested)
+packages/providers  VideoProvider interface, HiggsfieldProvider, docs catalog reader
+packages/db         Drizzle schema, migrations, generation and spend operations
+packages/storage    S3 client (R2 in production, SeaweedFS locally)
+infra               docker compose (Redis, dev Postgres, dev storage, worker)
+scripts             brand assets, contrast check, copy lint
 ```
 
 ## Run it locally
@@ -25,21 +26,19 @@ Needs Node 22+, pnpm 9, and Docker Desktop.
 ```bash
 pnpm install
 cp .env.example .env          # then fill in the secrets (command in the file)
-pnpm stack:up                 # n8n + Redis + Postgres (app DB on localhost:5433)
+pnpm stack:up                 # Postgres :5433, Redis :6380, S3 storage :9000
 pnpm db:migrate
-pnpm storage:seed             # S3-compatible storage on :9000 (bucket, CORS, sample video for the stub)
-pnpm n8n:build                # then import + publish the workflow (infra/n8n/README.md)
+pnpm storage:seed             # creates the storage bucket and CORS rules
 pnpm dev                      # web on http://localhost:3010
-pnpm dev:worker               # in a second terminal
-pnpm smoke                    # end-to-end signed round trip
-pnpm e2e                      # browser tests: sign up → make a video → review → connect on approve (uses your Chrome)
+pnpm dev:worker               # in a second terminal: Higgsfield generation engine
+# then open http://localhost:3010/app/connections and add your Higgsfield key
 ```
 
 ## Checks
 
 ```bash
 pnpm check                    # contrast, copy lint, typecheck, lint, unit tests
-TEST_DATABASE_URL=postgres://vidora:vidora@localhost:5433/vidora pnpm test   # adds DB integration tests
+TEST_DATABASE_URL=postgres://vidora:vidora@localhost:5433/vidora_test pnpm test   # adds DB integration tests
 pnpm brand                    # regenerate brand assets from assets/vidora-logo.png
 pnpm launch-check             # what still blocks a public launch (placeholders, legal review, platform applications)
 ```
@@ -56,7 +55,6 @@ Secrets live in Secret Manager and are mounted as env vars; the runtime service 
 
 | Env var | Source |
 |---|---|
-| `N8N_TO_VIDORA_SECRET` | secret `n8n-to-vidora-secret` |
 | `DATABASE_URL` | secret `database-url` (Neon pooled URL), added once Neon exists, see below |
 | `NEXT_PUBLIC_APP_URL` | build arg + env, `_APP_URL` in `infra/cloudbuild.web.yaml` |
 | `ENABLE_DESIGN_SYSTEM` | build arg, `_ENABLE_DESIGN_SYSTEM` in `infra/cloudbuild.web.yaml` (set `"false"` to hide `/design-system`) |

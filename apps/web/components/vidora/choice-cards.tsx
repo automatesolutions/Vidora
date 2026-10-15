@@ -10,6 +10,8 @@ export type ChoiceOption<T extends string> = {
   description?: string
   icon?: LucideIcon
   meta?: string
+  /** Shown but not selectable (e.g. "Coming soon"). */
+  disabled?: boolean
 }
 
 export function ChoiceCards<T extends string>({
@@ -50,9 +52,10 @@ export function ChoiceCards<T extends string>({
             <label
               key={o.value}
               className={cn(
-                "relative flex cursor-pointer items-start gap-3 rounded-md border bg-background transition-colors duration-150",
+                "relative flex items-start gap-3 rounded-md border bg-background transition-colors duration-150",
+                o.disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
                 size === "md" ? "min-h-16 p-4" : "min-h-12 px-4 py-3",
-                checked ? "border-foreground bg-card" : "border-border hover:border-foreground/60",
+                checked ? "border-foreground bg-card" : o.disabled ? "border-border" : "border-border hover:border-foreground/60",
                 "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring"
               )}
             >
@@ -61,6 +64,7 @@ export function ChoiceCards<T extends string>({
                 name={name}
                 value={o.value}
                 checked={checked}
+                disabled={o.disabled}
                 onChange={() => onChange(o.value)}
                 className="sr-only"
               />

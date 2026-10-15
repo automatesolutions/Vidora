@@ -14,7 +14,7 @@ export type AppSession = {
   email: string
   emailVerified: boolean
   workspaceId: string
-  role: "owner" | "admin" | "reviewer" | "viewer"
+  role: "owner" | "admin" | "editor" | "viewer"
 }
 
 export const getAppSession = cache(async (): Promise<AppSession | null> => {
@@ -33,12 +33,12 @@ export async function requireSession(returnTo?: string): Promise<AppSession> {
   return s
 }
 
-/** Roles that can approve, reject, and request changes. Viewers can only watch. */
-export function canReview(s: AppSession) {
+/** Roles that can change campaigns, keys and connections. Viewers can only look. */
+export function canEdit(s: AppSession) {
   return s.role !== "viewer"
 }
 
 /** Only same-site paths, so `?next=` can't send people to another site. */
-export function safeNext(next: string | null | undefined, fallback = "/app/videos") {
+export function safeNext(next: string | null | undefined, fallback = "/app") {
   return next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : fallback
 }

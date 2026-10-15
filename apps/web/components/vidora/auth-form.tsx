@@ -44,7 +44,7 @@ function Field({ label, hint, ...props }: React.ComponentProps<typeof Input> & {
 export function AuthForm({ mode, googleEnabled }: { mode: "sign-up" | "sign-in"; googleEnabled: boolean }) {
   const router = useRouter()
   const params = useSearchParams()
-  const next = safeNext(params.get("next"), mode === "sign-up" ? "/app/new" : "/app/videos")
+  const next = safeNext(params.get("next"), "/app")
   const [error, setError] = useState<string | null>(null)
   const [pending, start] = useTransition()
 

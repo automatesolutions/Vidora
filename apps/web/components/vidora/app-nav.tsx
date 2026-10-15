@@ -1,6 +1,6 @@
 "use client"
 
-import { Inbox, LogOut, Plus, Video } from "lucide-react"
+import { Clapperboard, Film, Inbox, LayoutDashboard, LogOut, Megaphone, PlugZap } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useTransition } from "react"
@@ -10,17 +10,21 @@ import { cn } from "@/lib/utils"
 
 // App navigation. Links are text-style, so the page's own buttons stay the only filled ones.
 const LINKS = [
-  { href: "/app/new", label: "New video", icon: Plus },
-  { href: "/app/videos", label: "Videos", icon: Video },
-  { href: "/app/queue", label: "Queue", icon: Inbox },
+  { href: "/app", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/app/campaigns", label: "Campaigns", icon: Megaphone },
+  { href: "/app/library", label: "Library", icon: Film },
+  { href: "/app/approvals", label: "Approvals", icon: Inbox },
+  { href: "/app/connections", label: "Connections", icon: PlugZap },
+  // Local development only: Shorts made with pnpm video:test.
+  ...(process.env.NODE_ENV !== "production" ? [{ href: "/app/test-videos", label: "Test videos", icon: Clapperboard }] : []),
 ] as const
 
-export function AppNav({ queueCount }: { queueCount: number }) {
+export function AppNav() {
   const pathname = usePathname()
   return (
     <nav aria-label="Main" className="-mx-1 flex min-w-0 gap-1 overflow-x-auto">
       {LINKS.map(({ href, label, icon: Icon }) => {
-        const active = href === "/app/videos" ? pathname === href || /^\/app\/videos\//.test(pathname) : pathname.startsWith(href)
+        const active = href === "/app" ? pathname === "/app" : pathname.startsWith(href)
         return (
           <Link
             key={href}
@@ -33,12 +37,6 @@ export function AppNav({ queueCount }: { queueCount: number }) {
           >
             <Icon aria-hidden className="size-5" strokeWidth={1.75} />
             {label}
-            {href === "/app/queue" && queueCount > 0 && (
-              <span className="tabular rounded-full bg-secondary px-2 text-caption text-secondary-foreground">
-                {queueCount}
-                <span className="sr-only"> waiting</span>
-              </span>
-            )}
           </Link>
         )
       })}

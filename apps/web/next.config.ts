@@ -16,7 +16,7 @@ const nextConfig: NextConfig = {
   }),
   cacheComponents: true,
   partialPrefetching: true,
-  transpilePackages: ["@vidora/core", "@vidora/db"],
+  transpilePackages: ["@vidora/core", "@vidora/db", "@vidora/providers"],
   serverExternalPackages: ["postgres"],
   turbopack: {
     rules: {

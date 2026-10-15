@@ -1,5 +1,8 @@
 import { youtubeUploadStatus, type Visibility } from "@vidora/core"
-import type { PublishOutcome } from "@vidora/db"
+// What one upload attempt ended with. "auth": reconnect needed; "retryable": try again later.
+export type PublishOutcome =
+  | { ok: true; externalPostId: string; externalUrl: string }
+  | { ok: false; kind: "auth" | "retryable" | "permanent"; error: string }
 
 // YouTube upload for one approved post: refresh the token if needed, resumable upload, then the cover.
 // `fetch` is injectable so tests can stand in for Google.
@@ -40,14 +43,20 @@ export type UploadInput = {
   audited: boolean
   video: Uint8Array
   cover: Uint8Array | null
+  tags?: string[]
+  /** Scheduled publishing: uploaded as private, YouTube makes it public at this time. */
+  publishAt?: Date | null
 }
 
 /** Uploads one Short. Returns the outcome the worker records with finishPost. */
 export async function uploadShort(f: Fetch, input: UploadInput): Promise<PublishOutcome> {
   const auth = { authorization: `Bearer ${input.accessToken}` }
   const metadata = {
-    snippet: { title: input.title.slice(0, 100), description: input.description, categoryId: "22" },
-    status: youtubeUploadStatus({ visibility: input.visibility, audited: input.audited, madeForKids: input.madeForKids }),
+    snippet: { title: input.title.slice(0, 100), description: input.description, categoryId: "22", tags: input.tags?.slice(0, 30) },
+    // A publish time requires privacyStatus private; YouTube flips it to public at publishAt.
+    status: input.publishAt
+      ? { ...youtubeUploadStatus({ visibility: "private", audited: input.audited, madeForKids: input.madeForKids }), publishAt: input.publishAt.toISOString() }
+      : youtubeUploadStatus({ visibility: input.visibility, audited: input.audited, madeForKids: input.madeForKids }),
   }
 
   const start = await f("https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status", {

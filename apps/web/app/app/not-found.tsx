@@ -7,11 +7,11 @@ export default function AppNotFound() {
   return (
     <EmptyState
       icon={SearchX}
-      title="We couldn't find that video"
+      title="We couldn't find that page"
       body="It may have been deleted, or it belongs to another workspace."
       action={
         <Button variant="secondary" asChild>
-          <Link href="/app/videos">Go to your videos</Link>
+          <Link href="/app">Go to the dashboard</Link>
         </Button>
       }
       className="mx-auto max-w-2xl"

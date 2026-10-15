@@ -15,17 +15,19 @@
     "brand": "node scripts/brand-assets.mjs",
     "check": "pnpm contrast && pnpm copy-lint && pnpm typecheck && pnpm lint && pnpm test",
     "dev:worker": "pnpm --filter @vidora/worker dev",
-    "test": "vitest run --root packages/core && vitest run --root packages/db && vitest run --root apps/worker",
+    "test": "vitest run --root packages/core && vitest run --root packages/providers && vitest run --root packages/director && vitest run --root packages/db && vitest run --root apps/worker",
     "db:generate": "pnpm --filter @vidora/db db:generate",
     "db:migrate": "node --env-file-if-exists=.env node_modules/tsx/dist/cli.mjs packages/db/src/migrate.ts",
     "stack:up": "docker compose -f infra/docker-compose.yml --env-file .env --profile dev up -d",
     "stack:down": "docker compose -f infra/docker-compose.yml --env-file .env --profile dev down",
-    "n8n:build": "node infra/n8n/build-workflows.mjs",
-    "smoke": "pnpm --filter @vidora/worker smoke",
     "launch-check": "node scripts/launch-check.mjs",
     "deploy:web": "gcloud builds submit --project vidora-510913 --region asia-southeast1 --config infra/cloudbuild.web.yaml .",
+    "e2e": "playwright test -c e2e/playwright.config.ts",
+    "db:reset": "node --env-file-if-exists=.env node_modules/tsx/dist/cli.mjs packages/db/src/reset.ts",
     "storage:seed": "node --env-file-if-exists=.env node_modules/tsx/dist/cli.mjs packages/storage/src/seed.ts",
-    "e2e": "playwright test -c e2e/playwright.config.ts"
+    "models:refresh": "pnpm --filter @vidora/worker models:refresh",
+    "director:try": "pnpm --filter @vidora/director try",
+    "video:test": "pnpm --filter @vidora/worker video:test"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",

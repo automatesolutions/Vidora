@@ -59,6 +59,11 @@ export async function getActiveAccount(db: DbOrTx, workspaceId: string, platform
   return row ?? null
 }
 
+/** Every YouTube channel connected to the workspace, oldest first. */
+export async function listAccounts(db: DbOrTx, workspaceId: string) {
+  return db.select().from(connectedAccounts).where(inWorkspace(connectedAccounts, workspaceId)).orderBy(connectedAccounts.createdAt)
+}
+
 /** Public fields only, for UI. Never send token columns to the browser. */
 export function accountForDisplay(a: ConnectedAccount) {
   return { id: a.id, platform: a.platform, displayName: a.displayName, handle: a.handle, avatarUrl: a.avatarUrl, status: a.status }
