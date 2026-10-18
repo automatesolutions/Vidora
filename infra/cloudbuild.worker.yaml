@@ -1,0 +1,17 @@
+# Builds the worker image and pushes it to Artifact Registry. Run from the repo root: pnpm deploy:worker
+substitutions:
+  _REGION: asia-southeast1
+  _IMAGE: ${_REGION}-docker.pkg.dev/${PROJECT_ID}/vidora/worker
+
+options:
+  dynamicSubstitutions: true
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "infra/worker.Dockerfile", "-t", "${_IMAGE}:${BUILD_ID}", "-t", "${_IMAGE}:latest", "."]
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args: ["push", "--all-tags", "${_IMAGE}"]

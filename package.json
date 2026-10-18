@@ -22,6 +22,7 @@
     "stack:down": "docker compose -f infra/docker-compose.yml --env-file .env --profile dev down",
     "launch-check": "node scripts/launch-check.mjs",
     "deploy:web": "gcloud builds submit --project vidora-510913 --region asia-southeast1 --config infra/cloudbuild.web.yaml .",
+    "deploy:worker": "gcloud builds submit --project vidora-510913 --region asia-southeast1 --config infra/cloudbuild.worker.yaml . && gcloud compute ssh vidora-worker --project vidora-510913 --zone asia-southeast1-b --tunnel-through-iap --command \"sudo google_metadata_script_runner startup\"",
     "e2e": "playwright test -c e2e/playwright.config.ts",
     "db:reset": "node --env-file-if-exists=.env node_modules/tsx/dist/cli.mjs packages/db/src/reset.ts",
     "storage:seed": "node --env-file-if-exists=.env node_modules/tsx/dist/cli.mjs packages/storage/src/seed.ts",
