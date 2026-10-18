@@ -68,12 +68,28 @@ export async function exchangeCode(code: string, verifier: string) {
   }
 }
 
+export class YouTubeApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly reason: string | null,
+    message: string
+  ) {
+    super(message)
+    this.name = "YouTubeApiError"
+  }
+}
+
 export async function fetchMyChannel(accessToken: string) {
   const res = await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true", {
     headers: { authorization: `Bearer ${accessToken}` },
     signal: AbortSignal.timeout(15_000),
   })
-  if (!res.ok) throw new Error(`YouTube channels.list failed (${res.status})`)
+  if (!res.ok) {
+    // Google explains 403s in the body: e.g. accessNotConfigured (YouTube Data API not enabled in the project).
+    const text = await res.text().catch(() => "")
+    const reason = /"reason":s*"([^"]+)"/.exec(text)?.[1] ?? null
+    throw new YouTubeApiError(res.status, reason, `YouTube channels.list failed (${res.status}${reason ? `, ${reason}` : ""})`)
+  }
   const body = (await res.json()) as {
     items?: { id: string; snippet: { title: string; customUrl?: string; thumbnails?: { default?: { url: string } } } }[]
   }

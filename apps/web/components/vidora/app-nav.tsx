@@ -1,6 +1,6 @@
 "use client"
 
-import { Clapperboard, Film, Inbox, LayoutDashboard, LogOut, Megaphone, PlugZap } from "lucide-react"
+import { Film, Inbox, LayoutDashboard, LogOut, Megaphone, PlugZap } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useTransition } from "react"
@@ -15,8 +15,6 @@ const LINKS = [
   { href: "/app/library", label: "Library", icon: Film },
   { href: "/app/approvals", label: "Approvals", icon: Inbox },
   { href: "/app/connections", label: "Connections", icon: PlugZap },
-  // Local development only: Shorts made with pnpm video:test.
-  ...(process.env.NODE_ENV !== "production" ? [{ href: "/app/test-videos", label: "Test videos", icon: Clapperboard }] : []),
 ] as const
 
 export function AppNav() {

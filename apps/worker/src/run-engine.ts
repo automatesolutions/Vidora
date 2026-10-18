@@ -49,7 +49,7 @@ import { DirectorError, type Director, type DirectorInput } from "@vidora/direct
 import type { VideoProvider } from "@vidora/providers"
 import { assembleShort, grabFrame } from "./assemble"
 import { log } from "./log"
-import { DEFAULT_VOICES, type VoiceResult } from "./voice"
+import { DEFAULT_VOICES, pickVoice, type VoiceResult } from "./voice"
 import type { PublishOutcome } from "./youtube"
 
 // The run engine: takes one booked run from "planned" to a scheduled YouTube post. Each call does
@@ -155,15 +155,6 @@ async function plan(deps: RunDeps, original: Run) {
     intensity: campaign.variationIntensity,
   })
 
-  // A locked element without a value yet keeps what this (first) run picked from now on.
-  const newLocks = campaign.lockedElements.filter((el) => !campaign.lockedValues[el] && variation[el])
-  if (newLocks.length) {
-    await deps.db
-      .update(schema.campaigns)
-      .set({ lockedValues: { ...campaign.lockedValues, ...Object.fromEntries(newLocks.map((el) => [el, variation[el]!])) } })
-      .where(eq(schema.campaigns.id, campaign.id))
-  }
-
   // Product photos → the provider's storage (once per run).
   const product = campaign.mode === "product" ? campaign.brief.product : undefined
   let photoRefs: string[] = []
@@ -268,6 +259,21 @@ async function plan(deps: RunDeps, original: Run) {
     })
   }
 
+  // The narrator voice sounds like the plan's on-screen person, unless the campaign locked one.
+  if (!locked.voice) {
+    const voice = pickVoice(result.plan.narrator, run.id)
+    if (voice) variation.voice = voice
+  }
+
+  // A locked element without a value yet keeps what this (first) run picked from now on.
+  const newLocks = campaign.lockedElements.filter((el) => !campaign.lockedValues[el] && variation[el])
+  if (newLocks.length) {
+    await deps.db
+      .update(schema.campaigns)
+      .set({ lockedValues: { ...campaign.lockedValues, ...Object.fromEntries(newLocks.map((el) => [el, variation[el]!])) } })
+      .where(eq(schema.campaigns.id, campaign.id))
+  }
+
   const runPlan: RunPlan = { ...result.plan, modelId: model.id, photoRefs, warnings }
   await upsertVideoForRun(deps.db, run, { status: "generating", title: result.plan.title })
   return stepRun(
@@ -351,12 +357,14 @@ async function assemble(deps: RunDeps, run: Run) {
     const jobs = await generationJobsForRun(deps.db, run.id)
     const scenes = []
     const voiceIssues: string[] = []
+    // A voice the creator locked wins; otherwise one that sounds like the on-screen person.
+    const voiceId = (c.campaign.lockedElements.includes("voice") ? run.variation?.voice : pickVoice(plan.narrator, run.id)) ?? run.variation?.voice ?? DEFAULT_VOICES[0]!
     for (const [i, s] of plan.scenes.entries()) {
       const stored = jobs.filter((j) => j.sceneIndex === i && j.status === "stored").sort((a, b) => b.attempt - a.attempt)[0]
       if (!stored?.storageKey) return fail(deps, run, "scene_missing", `Scene ${i + 1}'s clip is missing.`)
       writeFileSync(path.join(workDir, `scene-${i + 1}.mp4`), await deps.storage.getBytes(stored.storageKey))
       let voiceover: string | null = null
-      const voice = await deps.speak(s.voiceover_line, run.variation?.voice ?? DEFAULT_VOICES[0]!)
+      const voice = await deps.speak(s.voiceover_line, voiceId)
       if (voice.ok) {
         voiceover = `vo-${i + 1}.mp3`
         writeFileSync(path.join(workDir, voiceover), voice.audio)

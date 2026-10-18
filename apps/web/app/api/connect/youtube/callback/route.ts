@@ -3,7 +3,7 @@ import { getDb, upsertConnectedAccount } from "@vidora/db"
 import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 import { getAppSession } from "@/lib/server/session"
-import { appUrl, CONNECT_COOKIE, exchangeCode, fakeYouTubeEnabled, fetchMyChannel, oauthStateSecret, YT_SCOPES } from "@/lib/server/youtube"
+import { appUrl, CONNECT_COOKIE, exchangeCode, fakeYouTubeEnabled, fetchMyChannel, oauthStateSecret, YouTubeApiError, YT_SCOPES } from "@/lib/server/youtube"
 
 type State = { w: string; u: string; n: string }
 
@@ -62,6 +62,8 @@ export async function GET(req: Request) {
     }
   } catch (err) {
     console.error("YouTube connect failed", err)
+    if (err instanceof YouTubeApiError && (err.reason === "accessNotConfigured" || err.reason === "SERVICE_DISABLED")) return back("connect=api_disabled")
+    if (err instanceof YouTubeApiError && err.reason === "youtubeSignupRequired") return back("connect=no_channel")
     return back("connect=failed")
   }
   return back("connected=1")

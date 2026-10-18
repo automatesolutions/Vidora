@@ -30,34 +30,45 @@ const input: DirectorInput = {
   postDate: "Friday, 16 October 2026",
 }
 
-const shot = (camera = "slow push-in") => ({
-  shot_type: "medium close-up",
-  subject: ANCHOR,
-  action: "closes her laptop and leans back",
-  setting: "tidy oak desk by a window",
-  lighting: "soft window light",
-  camera_motion: camera,
-  lens_and_framing: "50mm feel, subject centered in the upper frame",
-  style: "warm golden-hour tones",
-  mood: "calm",
-})
+const shot = (camera = "slow push-in") => ({ shot_type: "medium close-up", camera_motion: camera, hero_moment: "she SHUTS the laptop at 2.0s" })
 
-const prompt = (action: string, extra = "") =>
-  `Medium close-up of ${ANCHOR}, ${action} at a tidy oak desk by a window as afternoon light fades. Soft window light from the left, warm golden-hour tones with gentle lens flare. Slow push-in toward her face. Calm, measured mood${extra}, vertical 9:16 composition, subject centered in the upper frame.`
+// A scene prompt in the labeled-section format (prompts.ts). The shared look is appended by assemble().
+const prompt = (subject: string, firstFrame: string, action: string) =>
+  [
+    "SHOT: One continuous medium close-up.",
+    `SUBJECT: ${subject}.`,
+    "LOCATION: a bright apartment home office; foreground a tidy oak desk with a ceramic mug, background a tall window over rooftops.",
+    `FIRST FRAME: ${firstFrame}`,
+    "OPTICS: 47° field of view, shallow depth of field, focus on her eyes.",
+    "CAMERA: slow push-in of about 20 cm over the whole shot, upright and level.",
+    `ACTION: ${action}`,
+    "PERFORMANCE: restrained and human, a held breath before the change.",
+    "PHYSICS: real weight and contact shadows, nothing floats.",
+    "AUDIO: room tone and soft diegetic sounds only. NO MUSIC, NO speech.",
+  ].join(" ")
+
+const LOOK: Plan["look"] = {
+  lighting: "Window key from frame-left, warm and low, camera on the shadow side, faint haze, WB locked 4800K.",
+  color_grade: "Warm oak and amber neutrals, one rust accent on the sweater.",
+  style: "Warm golden-hour tones with gentle lens flare, photorealistic live action, visible pores, fine film grain, NOT a 3D render, no plastic skin.",
+  locks: "identity matches the description exactly; one continuous shot; nothing in frame reads as lettering or a logo; natural hands with five fingers",
+}
 
 function goodPlan(): Plan {
   const scenes: Plan["scenes"] = [
-    { purpose: "hook", duration_sec: 5, voiceover_line: `${HOOK}`, features_anchor: true, shot: shot(), prompt: prompt("rubbing her eyes and slumping toward the screen"), negative_prompt: "", caption_words: "3 PM crash" },
-    { purpose: "build", duration_sec: 8, voiceover_line: "Your focus runs in cycles of about ninety minutes, and most of us push straight through the dip.", features_anchor: true, shot: shot(), prompt: `Overhead shot looking down on ${ANCHOR}, her hands drifting from a keyboard to a cooling mug among scattered sticky notes and a half-eaten apple. Late-afternoon light rakes across the desk, warm golden-hour tones, gentle haze. Slow push-in from above toward the mug as steam fades. Restless, heavy mood, vertical 9:16 composition, desk centered in the upper frame.`, negative_prompt: "", caption_words: "90-minute cycles" },
-    { purpose: "payoff", duration_sec: 10, voiceover_line: "Instead, stand up, walk to a window, and look at something far away for two minutes. Your attention resets faster than any scroll break.", features_anchor: true, shot: shot("slow push-in"), prompt: `Wide shot of ${ANCHOR} standing at a tall window in a bright apartment, gazing at distant rooftops as clouds drift. Warm golden-hour tones, gentle lens flare, soft haze over the city. Slow push-in from behind her shoulder toward the view. Calm and relieved mood, vertical 9:16 composition, subject centered in the upper frame.`, negative_prompt: "", caption_words: "Look far away" },
-    { purpose: "cta", duration_sec: 5, voiceover_line: "Follow for a new focus tip every day.", features_anchor: false, shot: shot(), prompt: "Extreme close-up of a ceramic mug of tea on a sunlit oak windowsill, steam curling upward as a breeze moves a sheer curtain. Warm golden-hour tones, gentle lens flare, soft haze. Slow push-in toward the rising steam. Peaceful mood, vertical 9:16 composition, mug centered in the upper frame.", negative_prompt: "", caption_words: "Daily focus tips" },
+    { purpose: "hook", duration_sec: 5, voiceover_line: `${HOOK}`, features_anchor: true, shot: shot(), prompt: prompt(ANCHOR, "she is already slumping toward the laptop screen, one hand rubbing her eyes.", "0.0-2.0s: her shoulders sink lower. 2.0-3.5s: her forehead DROPS onto her folded arms. 3.5-5.0s: a long, heavy exhale."), negative_prompt: "", caption_words: "3 PM crash" },
+    { purpose: "build", duration_sec: 8, voiceover_line: "Your focus runs in cycles of about ninety minutes, and most of us push straight through the dip.", features_anchor: true, shot: shot(), prompt: prompt(`seen from overhead, ${ANCHOR}`, "her hands are already drifting from the keyboard toward a cooling mug among scattered notes.", "0.0-3.0s: fingers hover over the keys, unsure. 3.0-5.5s: she PUSHES the mug aside and steam thins out. 5.5-8.0s: her hand returns to the keyboard and stalls."), negative_prompt: "", caption_words: "90-minute cycles" },
+    { purpose: "payoff", duration_sec: 10, voiceover_line: "Instead, stand up, walk to a window, and look at something far away for two minutes. Your attention resets faster than any scroll break.", features_anchor: true, shot: shot("slow push-in"), prompt: prompt(ANCHOR, "she is already standing at the tall window, seen from behind her shoulder, clouds drifting over the rooftops.", "0.0-4.0s: she rolls her shoulders back. 4.0-6.0s: she LIFTS her gaze to the far horizon. 6.0-10.0s: her breathing slows and her hands loosen at her sides."), negative_prompt: "", caption_words: "Look far away" },
+    { purpose: "cta", duration_sec: 5, voiceover_line: "Follow for a new focus tip every day.", features_anchor: false, shot: shot(), prompt: prompt("a ceramic mug of tea on a sunlit oak windowsill", "steam is already curling upward as a breeze moves a sheer curtain.", "0.0-2.0s: steam rises in a thin ribbon. 2.0-3.5s: the curtain BILLOWS and the steam swirls. 3.5-5.0s: the air settles and steam straightens."), negative_prompt: "", caption_words: "Daily focus tips" },
   ]
   return {
     concept: "The afternoon slump is a natural focus cycle, and a two-minute far-gaze break resets it.",
     angle: "common mistake and the fix",
     hook: HOOK,
     subject_anchor: ANCHOR,
+    narrator: { gender: "female", age: "young" },
     continuity: { palette: "warm amber and oak", wardrobe_and_props: "rust-orange knit sweater, ceramic mug", location: "bright apartment home office" },
+    look: LOOK,
     scenes,
     voiceover_script: scenes.map((s) => s.voiceover_line).join(" "),
     title: "Why your focus crashes at 3 PM (and the 2-minute fix)",
@@ -140,18 +151,35 @@ describe("plan validator", () => {
   it("flags the problems that waste a generation", () => {
     const p = goodPlan()
     p.scenes[0]!.duration_sec = 12 // not allowed by this model
-    p.scenes[1]!.prompt = p.scenes[1]!.prompt.replace("vertical 9:16 composition", "landscape shot") + " A neon sign that says FOCUS hangs above."
+    p.scenes[1]!.prompt += " A neon sign that says FOCUS hangs above."
     p.scenes[2]!.prompt = p.scenes[2]!.prompt.replace(ANCHOR, "a woman") // anchor dropped
     p.scenes[3]!.prompt += " Then cut to a sunset."
     p.voiceover_script = "x"
     p.description = "Unlike caffeine pills, this works."
     const errors = validatePlan(autoFix(p, input), input, HOOK).filter((i) => i.severity === "error").map((i) => i.message)
     expect(errors.join("\n")).toMatch(/Scene 1: duration 12 s isn't allowed/)
-    expect(errors.join("\n")).toMatch(/Scene 2: add "vertical 9:16 composition"/)
     expect(errors.join("\n")).toMatch(/Scene 2: the prompt mentions "sign that says"/)
     expect(errors.join("\n")).toMatch(/Scene 3: paste the subject_anchor/)
     expect(errors.join("\n")).toMatch(/Scene 4: one prompt is one continuous shot/)
     expect(errors.join("\n")).toMatch(/caffeine pills/)
+  })
+
+  it("trims a repeated shared look out of a scene prompt", () => {
+    const p = goodPlan()
+    p.scenes[0]!.prompt += " LIGHTING: harsh noon sun. STYLE: glossy."
+    expect(autoFix(p, input).scenes[0]!.prompt).not.toContain("harsh noon sun")
+  })
+
+  it("treats negated mentions as locks, not requests", () => {
+    const p = goodPlan()
+    p.scenes[0]!.prompt += " NO logos, no on-screen text, no cuts, no montage."
+    expect(validatePlan(autoFix(p, input), input, HOOK)).toEqual([])
+  })
+
+  it("warns when a prompt is a flat paragraph instead of labeled sections", () => {
+    const p = goodPlan()
+    p.scenes[1]!.prompt = `Overhead shot of ${ANCHOR} at a desk, pushing a mug aside. Warm light. Slow push-in. Vertical 9:16 composition. ` + "Soft afternoon haze. ".repeat(50)
+    expect(validatePlan(autoFix(p, input), input, HOOK).map((i) => i.message).join("\n")).toMatch(/Scene 2: write the prompt as labeled sections; it's missing SHOT:/)
   })
 
   it("requires the hook as the first spoken words", () => {
@@ -205,12 +233,17 @@ describe("director agent", () => {
 
   it("sends the exact issues back for repair and keeps the better plan", async () => {
     const broken = goodPlan()
-    broken.scenes[2]!.prompt = broken.scenes[2]!.prompt.replace("vertical 9:16 composition", "")
+    broken.scenes[2]!.prompt = broken.scenes[2]!.prompt.replace(ANCHOR, "a woman")
     const { call, requests } = fakeCall({ ideate: [ideation], plans: [broken, goodPlan()] })
     const result = await createDirector(call).planRun(input)
     expect(requests).toHaveLength(3)
-    expect(requests[2]!.instructions).toContain('Scene 3: add "vertical 9:16 composition" to the prompt.')
+    expect(requests[2]!.instructions).toContain("Scene 3: paste the subject_anchor into the prompt word for word.")
+    // The repair saw scene-only prompts; the result carries the shared look and framing.
+    expect(requests[2]!.instructions).not.toContain("WB locked 4800K. COLOR GRADE")
+    expect(result.plan.scenes[2]!.prompt).toContain(ANCHOR)
+    expect(result.plan.scenes[2]!.prompt).toContain("WB locked 4800K")
     expect(result.plan.scenes[2]!.prompt).toContain("vertical 9:16 composition")
+    expect(result.plan.scenes[2]!.prompt).toContain("NO ONE SPEAKS")
   })
 
   it("fails the run when errors survive every repair", async () => {

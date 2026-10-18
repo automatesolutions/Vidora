@@ -51,11 +51,15 @@ export function targetSeconds(brief: DirectorBrief) {
   return Math.min(Math.max(brief.targetLengthSec ?? DEFAULTS.targetLengthSec, 10), DEFAULTS.maxLengthSec)
 }
 
-/** The prompt length we ask for: long enough to be precise, inside the model's hard limit. */
+/** The prompt length we ask for: long enough for every labeled section (prompts.ts), inside the model's hard limit. */
 export function promptBudget(model: DirectorModel) {
   const hard = model.promptMaxChars ?? DEFAULTS.promptMaxChars
-  return { min: Math.min(180, hard), target: Math.min(700, hard), max: hard }
+  const target = Math.min(3500, Math.round(hard * 0.88))
+  return { min: Math.min(900, Math.round(hard * 0.4)), target, scene: Math.max(400, target - LOOK_CHARS), max: hard }
 }
+
+/** About how long the shared look is once appended to each scene (validate.ts assemble). */
+export const LOOK_CHARS = 1020
 
 const esc = (s: string) => s.replace(/</g, "‹").replace(/>/g, "›") // keep user text from closing our tags
 
@@ -100,7 +104,7 @@ Music mood (for your pacing only, never in prompts): ${esc(v.music_mood ?? "n/a"
 <video_model>
 Higgsfield model: ${esc(input.model.displayName)} (${esc(input.model.id)})
 Allowed scene durations in seconds: ${input.model.durations.join(", ") || "5"}
-Prompt length: aim for about ${budget.target} characters; never under ${budget.min} or over ${budget.max}.
+Prompt length: each scene prompt about ${budget.scene} characters, and the whole look about ${LOOK_CHARS}; together they must stay under ${budget.max}.
 Negative prompt: ${input.model.supportsNegativePrompt ? "supported, fill it in" : "not supported, leave it empty"}
 Every scene is a separate generation: the model remembers nothing between scenes.
 </video_model>

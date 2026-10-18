@@ -13,12 +13,42 @@ export type Issue = { severity: "error" | "warn"; message: string }
 const TEXT_REQUEST =
   /\b(text|caption|captions|subtitle|subtitles|title card|lettering|logo|logos|watermark|headline|signage|sign that (?:says|reads)|words? (?:on|appear)|written|typography)\b/i
 const CUT_WORDS = /\b(then cut to|cut to|montage|split screen|transition to|scene changes)\b/i
+// Prompts state locks like "NO logos" and "no cuts, no montage"; a negated mention is a rule, not a request.
+const NEGATED = /\b(no|not|never|zero|without|nothing|avoid)\b[^.;:\n]{0,60}$/i
+// The labeled sections the system prompt asks for (prompts.ts); missing ones usually mean a flat prompt.
+const SECTIONS = ["SHOT:", "FIRST FRAME:", "ACTION:"]
+// Where the shared look starts; a scene prompt that repeats it gets trimmed back (autoFix).
+const SHARED = /\b(?:LIGHTING|COLOR GRADE|STYLE|OUTPUT|LOCKS):/
+
+export const OUTPUT_LINE = "OUTPUT: Upright camera, level horizon, vertical 9:16 composition, key subject in the upper two thirds, lower quarter kept clear. NO ONE SPEAKS: lips stay closed or relaxed, no talking or lip movement."
+
+/** The prompts we send: each scene's own sections, then the look written once for the whole video. */
+export function assemble(plan: Plan): Plan {
+  const l = plan.look
+  const tail = `LIGHTING: ${l.lighting.trim()} COLOR GRADE: ${l.color_grade.trim()} STYLE: ${l.style.trim()} ${OUTPUT_LINE} LOCKS: ${l.locks.trim()}`
+  return { ...plan, scenes: plan.scenes.map((s) => ({ ...s, prompt: `${s.prompt} ${tail}` })) }
+}
+
+/** The first match of `re` in `p` that isn't negated by the words just before it. */
+function requested(re: RegExp, p: string) {
+  for (const m of p.matchAll(new RegExp(re.source, "gi"))) {
+    if (!NEGATED.test(p.slice(Math.max(0, m.index - 80), m.index))) return m
+  }
+  return null
+}
+
+/** The FIRST FRAME through ACTION sections of a labeled prompt, or the whole prompt if it has no sections. */
+function actionOf(p: string) {
+  const start = p.indexOf("FIRST FRAME:")
+  const end = p.indexOf("PERFORMANCE:")
+  return start >= 0 ? p.slice(start, end > start ? end : undefined) : p
+}
 
 /** Fixes we can make ourselves, before spending a repair call. Returns a new plan. */
 export function autoFix(plan: Plan, input: DirectorInput): Plan {
   const scenes = plan.scenes.map((s) => ({
     ...s,
-    prompt: s.prompt.replace(/\s+/g, " ").trim(),
+    prompt: s.prompt.split(SHARED)[0]!.replace(/\s+/g, " ").trim(),
     negative_prompt: input.model.supportsNegativePrompt ? s.negative_prompt.trim() : "",
   }))
   return {
@@ -41,7 +71,7 @@ export function validatePlan(plan: Plan, input: DirectorInput, hook: string): Is
   const rate = SPEECH_RATE[lang] ?? SPEECH_RATE.en!
   const budget = promptBudget(input.model)
   const allowed = input.model.durations.length ? input.model.durations : [5]
-  const scenes = plan.scenes
+  const scenes = assemble(plan).scenes // check what Higgsfield will receive
 
   // Structure
   if (scenes.length < 2) error("Use at least 2 scenes.")
@@ -78,12 +108,14 @@ export function validatePlan(plan: Plan, input: DirectorInput, hook: string): Is
     const n = `Scene ${i + 1}`
     const p = s.prompt
     if (!allowed.includes(s.duration_sec)) error(`${n}: duration ${s.duration_sec} s isn't allowed by this model; use one of ${allowed.join(", ")}.`)
-    if (p.length > budget.max) error(`${n}: the prompt is ${p.length} characters; this model's limit is ${budget.max}.`)
+    if (p.length > budget.max) error(`${n}: with the shared look the prompt is ${p.length} characters; this model's limit is ${budget.max}, so shorten this scene's sections.`)
     if (p.length < budget.min) warn(`${n}: the prompt is only ${p.length} characters; describe the shot in at least ${budget.min}.`)
-    if (!/vertical 9:16/i.test(p)) error(`${n}: add "vertical 9:16 composition" to the prompt.`)
-    const text = TEXT_REQUEST.exec(p)
+    const missing = SECTIONS.filter((h) => !p.includes(h))
+    if (missing.length) warn(`${n}: write the prompt as labeled sections; it's missing ${missing.join(", ")}.`)
+    else if (!/\d(?:\.\d)?\s*[-–]\s*\d(?:\.\d)?\s*s/.test(p.slice(p.indexOf("ACTION:")))) warn(`${n}: give ACTION timed beats ("0.0-1.5s: …") with the hero moment in capitals.`)
+    const text = requested(TEXT_REQUEST, p)
     if (text) error(`${n}: the prompt mentions "${text[0]}". Video models can't render text or logos well; show the real thing instead (captions are added later).`)
-    const cut = CUT_WORDS.exec(p)
+    const cut = requested(CUT_WORDS, p)
     if (cut) error(`${n}: one prompt is one continuous shot; remove "${cut[0]}".`)
     const move = normalizeText(s.shot.camera_motion).split(" ").filter((w) => w.length > 3).slice(0, 2)
     if (move.length && !move.every((w) => normalizeText(p).includes(w))) warn(`${n}: the prompt should describe its camera move ("${s.shot.camera_motion}").`)
@@ -92,11 +124,11 @@ export function validatePlan(plan: Plan, input: DirectorInput, hook: string): Is
     if (words(s.voiceover_line) > s.duration_sec * rate * 1.35) warn(`${n}: "${s.voiceover_line}" is too long for ${s.duration_sec} s; shorten it or lengthen the scene.`)
   })
 
-  // Near-identical prompts look like a loop.
+  // Near-identical prompts look like a loop. Light, style, and locks repeat on purpose, so compare the action.
   for (let i = 0; i < scenes.length; i++) {
     for (let j = i + 1; j < scenes.length; j++) {
-      const a = shingles(scenes[i]!.prompt.replace(anchor, ""))
-      const b = shingles(scenes[j]!.prompt.replace(anchor, ""))
+      const a = shingles(actionOf(scenes[i]!.prompt).replace(anchor, ""))
+      const b = shingles(actionOf(scenes[j]!.prompt).replace(anchor, ""))
       if (jaccard(a, b) > 0.6) warn(`Scenes ${i + 1} and ${j + 1} describe nearly the same shot; change the shot type, action, or setting of one.`)
     }
   }
@@ -112,7 +144,7 @@ export function validatePrompt(prompt: string, input: Pick<DirectorInput, "model
   const budget = promptBudget(input.model)
   if (prompt.length > budget.max) issues.push({ severity: "error", message: `Keep the prompt under ${budget.max} characters.` })
   if (!/vertical 9:16/i.test(prompt)) issues.push({ severity: "error", message: 'Include "vertical 9:16 composition".' })
-  if (TEXT_REQUEST.test(prompt)) issues.push({ severity: "error", message: "Don't ask for text, captions, signage, or logos." })
+  if (requested(TEXT_REQUEST, prompt)) issues.push({ severity: "error", message: "Don't ask for text, captions, signage, or logos." })
   if (anchor && !prompt.includes(anchor)) issues.push({ severity: "warn", message: "Keep the subject anchor word for word." })
   return issues
 }

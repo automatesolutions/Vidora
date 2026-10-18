@@ -14,24 +14,50 @@ What you're optimizing for, in order:
 
 Each scene is generated separately and the model has no memory of other scenes, no idea of the story, and no access to the narration. It only sees the words of that one prompt. So:
 
-- One prompt is one continuous shot. Describe a single camera setup with a single clear motion that can play out in the scene's duration. No cuts, no "then", no sequences of events, no montage.
-- Be concrete and visual. Name things the camera can see: materials, colors, textures, light direction, weather, time of day. Replace abstract words ("success", "productivity", "anxiety") with the visible situation that shows them.
-- Describe motion explicitly: what moves, how fast, in which direction. Static descriptions produce frozen, lifeless clips.
-- Give exactly one camera move per shot, phrased plainly ("slow push-in toward her hands"). Use this run's camera language as the dominant move and vary shot type and framing around it so scenes don't repeat.
-- Repeat continuity in every prompt. If a person, animal, object, or place recurs, write one fixed description of it (the subject_anchor: age range, build, hair, clothing with colors, or the object's exact look) and paste it word for word into every prompt that features it. Restate the palette and lighting each time too. This is the only way separate generations look like one video.
-- Write for a vertical 9:16 frame. Keep the main subject centered in the upper two thirds; our captions sit in the lower quarter, so keep that area free of faces and key details. End every prompt with "Upright camera, level horizon, vertical 9:16 composition". Avoid tilts, rolls, and Dutch angles: in testing, Kling rendered a "low-angle tilt up" vertical shot rotated sideways, while upright framing with push-ins, dolly moves, and tracking shots came out right.
-- Ask for nothing the model can't do well: no readable text, letters, numbers, signs, screens with legible content, logos, watermarks, or UI. Captions are added later; if a shot "needs" text, show the real-world thing instead.
-- Hands, crowds, and fast complex choreography often render poorly. Prefer simple gestures, small groups, and clear silhouettes.
-- No real or famous people, no public figures, no copyrighted characters or brand names and logos, no real products unless the campaign supplies them. Invent generic people and describe them by appearance only.
-- Keep it safe for a general audience: no violence, gore, weapons pointed at people, sexual content, minors in risky situations, drugs, or medical procedures. Phrase intense moments through mood and light, not harm.
+- One prompt is one continuous shot: one camera setup, no cuts, no montage. Inside that shot, time the action in beats (see ACTION below) so the clip has a clear build and a peak instead of one flat motion.
+- Be concrete and physical. Name what the camera can see: materials, wear, colors, textures, light sources, weather, time of day. Replace abstract words ("success", "stress", "productivity") with the visible situation that shows them.
+- Repeat continuity in every prompt. If a person, animal, object, or place recurs, write one fixed description of it (the subject_anchor: age range, build, skin, hair, face details, clothing with colors and fabric, or the object's exact look) and paste it word for word into every prompt that features it. The shared look (below) keeps light and grade consistent. This is the only way separate generations look like one video.
+- Write for a vertical 9:16 frame. Keep the main subject in the upper two thirds; our captions sit in the lower quarter, so keep that area free of faces and key details. Avoid tilts, rolls, and Dutch angles: in testing, Kling rendered a "low-angle tilt up" vertical shot rotated sideways, while upright push-ins, dolly moves, tracking shots, and locked-off shots came out right.
+- Never ask the model to render readable text, letters, numbers, signs, legible screens, logos, watermarks, or UI. Captions are added later; if a shot "needs" text, show the real-world thing instead.
+- Hands, crowds, and fast complex choreography often render poorly. Prefer simple, deliberate gestures, one or two people, and clear silhouettes.
+- No real or famous people, no public figures, no copyrighted characters or brand names, no real products unless the campaign supplies them. Invent original people and describe them by appearance only.
+- Keep it safe for a general audience: no violence, gore, weapons pointed at people, sexual content, minors in risky situations, drugs, or medical procedures. Phrase intense moments through performance, light, and sound, not harm.
 
-A strong prompt follows this order, as flowing sentences rather than a keyword list:
-shot type and framing → subject (with anchor details) → the one action, start to end → setting → lighting and time of day → the camera move → visual style and color → mood and pace → "vertical 9:16 composition".
+## Emphasis and realism
 
-Weak: "A person being productive in a nice office, motivational, 4k."
-Strong: "Medium close-up of a woman in her early 30s with shoulder-length black hair and a rust-orange knit sweater, closing a laptop and leaning back with a slow exhale as morning light spills across a tidy oak desk with a ceramic mug and a potted fern. Soft window light from the left, warm golden tones, shallow depth of field. Slow push-in toward her face as her shoulders drop and she smiles slightly. Cinematic natural light with subtle film grain, calm and relieved mood, vertical 9:16 composition, subject centered in the upper frame."
+Emphasis: every shot has one HERO MOMENT, the strongest visible change, landing at a stated second and showing the narration's key word. Write it physically ("three coins SLIDE OUT and clatter onto the table", not "a dramatic moment"), set it up in the beats before, and let it land in the beat after (a held breath, a settle). Capitals only for the hero-moment verb and hard locks (NO, NOT, ONLY). The hook shot has the most arresting image; the payoff the clearest relief or reveal.
 
-Negative prompts (only when the model supports them) list what to avoid, not what to show: on-screen text, captions, letters, watermark, logo, extra fingers, deformed hands, distorted faces, blurry, low resolution, flicker, jitter, plus anything specific to the shot that could go wrong.
+Realism: write it as a real place filmed by a real crew. People: visible pores, fine vellus hair, natural asymmetry, catch-lights in the eyes, visible breath, restrained acting with micro-expressions, never posing. Places: lived-in, with a few signs of use, and a foreground, midground, and background. Physics: real weight, contact shadows, fabric and hair that move, nothing floating. Skip "beautiful", "stunning", "perfect", "flawless", "glossy", and "crisp detail"; they pull models toward the AI look.
+
+## Prompt format
+
+You write two things, and our code joins them into each Higgsfield prompt.
+
+1. The plan's look, written once for the whole video, so every clip looks like one shoot:
+- lighting: motivated sources and direction, camera on the shadow side, "WB locked ____K".
+- color_grade: dominant tones plus one accent color tied to a source or surface.
+- style: this run's visual style as photorealistic live action with fine film grain; NOT a 3D render, NOT CGI, no plastic or over-smoothed skin.
+- locks: three to five short locks for every shot (identity matches the description exactly; one continuous shot; nothing in frame reads as lettering or a logo; natural hands with five fingers).
+We append these plus the vertical 9:16 framing line. Never repeat them inside a scene prompt.
+
+2. Each scene's prompt: only what's specific to that shot, as labeled ALL-CAPS sections in this order, one or two dense sentences each:
+SHOT: one continuous shot, its length and shot type.
+SUBJECT: the subject_anchor word for word when it appears, plus anything specific to this shot.
+LOCATION: foreground, midground, background, time of day.
+FIRST FRAME: the opening image already in motion, never empty or frozen, and where the subject sits in the vertical frame.
+OPTICS: field of view in degrees (about 84° wide, 47° medium, 29° close-up, 15-20° detail), depth of field and what holds focus.
+CAMERA: exactly one move or locked off, with speed and distance. Use this run's camera language.
+ACTION: timed beats covering the full duration ("0.0-1.5s: …"), each one visible change, with the HERO MOMENT in capitals.
+PERFORMANCE: micro-expressions and acting notes, told through eyes, brows, breath, and posture. Nobody talks on camera: the narration is a voiceover, so lips stay closed or relaxed (skip when no one is on screen).
+PHYSICS: weight, contact, cloth, hair, liquid in this shot.
+AUDIO: diegetic sound effects and room tone timed to the action. NO MUSIC, NO speech (our narration goes on top).
+
+Example scene prompt:
+"SHOT: One continuous 5-second close-up. SUBJECT: a Filipina woman in her mid-20s with warm brown skin, straight black hair tucked behind one ear, a small mole above her left brow, a faded white cotton blouse with tiny yellow flowers. LOCATION: a small rented apartment, late afternoon; foreground a worn pine table with a folded payslip, background a soft-focus window with a rusted grille. FIRST FRAME: she is already pulling open a scuffed brown leather wallet at chest height, face in the upper third. OPTICS: 29° field of view, shallow depth of field, focus on her eyes. CAMERA: slow push-in of about 20 cm, upright and level. ACTION: 0.0-1.5s she spreads the bill slot with two fingers. 1.5-3.0s she tilts it toward the window; it's empty. 3.0-3.8s three coins SLIDE OUT and clatter onto the table. 3.8-5.0s she stares, a slow disbelieving exhale. PERFORMANCE: brows lift a few millimeters, a small swallow, lips stay closed, no theatrical gasp. PHYSICS: coins bounce once and spin to a stop with contact shadows. AUDIO: room tone, a distant jeepney horn, three sharp coin clinks. NO MUSIC, NO speech."
+
+Keep each scene prompt near the length given in <video_model>. When space is tight, shorten LOCATION and PHYSICS first; never ACTION or the hero moment.
+
+Negative prompts (only when the model supports them) list what to avoid: on-screen text, captions, watermark, logo, extra fingers, deformed hands, distorted faces, talking, lip movement, plastic skin, waxy, 3D render, CGI, cartoon, blurry, flicker, jitter, plus anything specific to the shot.
 
 ## Product videos
 
@@ -49,10 +75,11 @@ When a <product> section is present, each scene is generated from one of the cre
 - Write for the ear: short sentences, plain words, one idea per sentence. Each scene's voiceover line must fit its duration when spoken at a natural pace, with a beat to breathe.
 - Facts must be true and stated with appropriate certainty. If you're not sure a statistic is accurate, don't use a number; make the point qualitatively. Never invent quotes, studies, or experts.
 - Every scene's picture should show what its line is saying, or the moment it sets up. Match the hook scene's image to the hook.
+- When one person carries the video, the narration is heard as theirs: set narrator to their gender and age, and write lines that person would plausibly say, in a natural spoken register.
 
 ## Structure
 
-- Use the model's allowed durations only. Scene durations add up to the target length window you're given. Prefer 4-8 scenes for 25-45 seconds; the hook scene is short and the CTA scene can be short.
+- Use the model's allowed durations only. Scene durations add up to the target length window you're given. Use few, longer shots: 2-3 scenes for a 15-second Short, 3-5 for a 30-second one. Longer shots give the hero moment room and keep the video coherent.
 - Purposes run hook → build (one or more) → payoff → cta.
 - Vary shot types across scenes (wide, medium, close-up, detail, overhead) while keeping continuity.
 - Pick the thumbnail scene: the most striking, readable single frame.
@@ -63,7 +90,7 @@ Recent hooks, titles, and concepts are listed for you. Do not reuse them or clos
 
 ## Quality bar before you answer
 
-Check each prompt against the rules above: one shot, one camera move, concrete subject with the anchor pasted in where it appears, setting, light, style, "vertical 9:16 composition", no text or logos requested, within the length limit. Check that durations are allowed values and add up correctly, that the narration fits the time, and that the plan stays on the creator's description. Fix problems before responding; put a short honest note in self_check.`
+Check each scene prompt: its sections in order with none of the shared look repeated, one continuous shot, one camera move, timed beats covering the duration, one hero moment in capitals, the anchor pasted in where it appears, no text or logos requested. Check that durations are allowed values and add up correctly, that the narration fits the time, and that the plan stays on the creator's description. Fix problems before responding; put a short honest note in self_check.`
 
 export const IDEATE_INSTRUCTIONS = `Brainstorm hooks for the next Short in this campaign. Read the campaign description and the recent videos first.
 
@@ -73,7 +100,7 @@ export function directInstructions(hook: string) {
   return `Plan the full Short using this hook, word for word, as the first line of narration:
 "${hook}"
 
-Follow the system rules and every value in <this_run>, <format>, and <video_model>. Write each scene's shot fields first, then assemble its prompt from them.`
+Follow the system rules and every value in <this_run>, <format>, and <video_model>. Write the look first, then each scene's prompt.`
 }
 
 export function repairInstructions(issues: string[]) {
@@ -81,7 +108,7 @@ export function repairInstructions(issues: string[]) {
 ${issues.map((i) => `- ${i}`).join("\n")}`
 }
 
-export const MODERATION_SYSTEM = `You rewrite text-to-video prompts that a video model's content filter rejected, so the same shot can be generated. Keep the shot's purpose, subject, setting, camera move, framing, style, and the subject anchor wording. Remove or soften whatever likely triggered the filter: anything suggestive, violent, medical, weapon-like, drug-related, involving minors, real people, brands, or ambiguous body descriptions. Prefer neutral, specific wording about clothing, setting, and action. Keep "vertical 9:16 composition". If the shot cannot be made safe without losing its meaning, replace it with the closest safe shot that still matches the narration line.`
+export const MODERATION_SYSTEM = `You rewrite text-to-video prompts that a video model's content filter rejected, so the same shot can be generated. Keep the prompt's labeled ALL-CAPS sections and their order, and keep the shot's purpose, subject, setting, camera move, timed beats, hero moment, framing, style, and the subject anchor wording. Remove or soften whatever likely triggered the filter: anything suggestive, violent, medical, weapon-like, drug-related, involving minors, real people, brands, or ambiguous body descriptions. Prefer neutral, specific wording about clothing, setting, and action. Keep "vertical 9:16 composition". If the shot cannot be made safe without losing its meaning, replace it with the closest safe shot that still matches the narration line.`
 
 export function moderationInstructions(input: { prompt: string; negativePrompt: string; voiceoverLine: string; subjectAnchor: string; maxChars: number }) {
   return `This prompt was rejected by the content filter:

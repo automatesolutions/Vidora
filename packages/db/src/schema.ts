@@ -367,6 +367,7 @@ export type RunPlan = {
   concept: string
   hook: string
   subject_anchor: string
+  narrator?: { gender: "female" | "male"; age: "young" | "middle_aged" | "old" }
   scenes: { purpose: string; duration_sec: number; voiceover_line: string; prompt: string; negative_prompt: string; caption_words: string }[]
   voiceover_script: string
   title: string

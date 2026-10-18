@@ -9,16 +9,17 @@ import type { VariationIntensity } from "./campaign"
 /** Option pools for the axes the engine varies. Campaign settings can replace any pool. */
 export const DEFAULT_POOLS = {
   visual_style: [
-    "cinematic natural light, shallow depth of field, subtle film grain",
-    "bright clean commercial look, soft diffused light, crisp detail",
-    "moody low-key lighting, deep shadows, rich contrast",
+    // Every style is photorealistic live action; the director adds the realism locks (prompts.ts).
+    "cinematic natural light, shallow depth of field, fine film grain",
+    "bright airy daylight, soft window bounce, true-to-life color",
+    "moody low-key practical lighting, deep shadows, rich contrast",
     "warm golden-hour tones, gentle lens flare, soft haze",
     "cool blue-hour palette, calm and airy, soft contrast",
-    "documentary realism, available light, natural colors",
-    "vivid saturated colors, punchy contrast, glossy finish",
-    "muted pastel palette, soft matte finish, minimal styling",
-    "high-contrast graphic look, bold color blocking, clean backgrounds",
-    "dreamy soft focus, glowing highlights, light bloom",
+    "handheld documentary realism, available light, natural colors",
+    "saturated warm-and-teal film look, punchy contrast, 35mm grain",
+    "muted pastel palette, soft overcast light, matte film finish",
+    "bold single-color accent against neutral surroundings, hard sunlight, crisp shadows",
+    "night city practicals, neon spill and wet reflections, anamorphic flares",
   ],
   camera_language: [
     "slow push-in",

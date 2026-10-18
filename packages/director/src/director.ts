@@ -4,7 +4,7 @@ import { DirectorError } from "./claude"
 import { promptBudget, renderContext, type DirectorInput } from "./context"
 import { DIRECTOR_SYSTEM, directInstructions, IDEATE_INSTRUCTIONS, MODERATION_SYSTEM, moderationInstructions, repairInstructions } from "./prompts"
 import { IdeationSchema, PlanSchema, RewriteSchema, type Ideation, type Plan } from "./schemas"
-import { autoFix, validatePlan, validatePrompt, type Issue } from "./validate"
+import { assemble, autoFix, validatePlan, validatePrompt, type Issue } from "./validate"
 
 // The director agent. For one run of a campaign:
 //   1. ideate  → 8 hook candidates (Claude)
@@ -25,7 +25,7 @@ const MAX_REPAIRS = 2
 
 export function createDirector(call: StructuredCall) {
   async function ideate(input: DirectorInput, context: string, extra = "") {
-    return call({ schema: IdeationSchema, system: DIRECTOR_SYSTEM, context, instructions: IDEATE_INSTRUCTIONS + extra, effort: "medium", maxTokens: 16_000 })
+    return call({ schema: IdeationSchema, system: DIRECTOR_SYSTEM, context, instructions: IDEATE_INSTRUCTIONS + extra, effort: "low", maxTokens: 8_000 })
   }
 
   /** The hook least like anything used before; null if every candidate is too close. Prefers this run's angle. */
@@ -54,7 +54,7 @@ export function createDirector(call: StructuredCall) {
     }
     if (!hook) throw new DirectorError("no_fresh_hook", "Couldn't find a hook that's different enough from recent videos.")
 
-    let res = await call({ schema: PlanSchema, system: DIRECTOR_SYSTEM, context, instructions: directInstructions(hook), effort: "high" })
+    let res = await call({ schema: PlanSchema, system: DIRECTOR_SYSTEM, context, instructions: directInstructions(hook), effort: "medium", maxTokens: 16_000 })
     calls.push({ step: "direct", model: res.model, usage: res.usage })
     let plan = autoFix(res.data, input)
     let issues = validatePlan(plan, input, hook)
@@ -67,6 +67,7 @@ export function createDirector(call: StructuredCall) {
         context,
         instructions: `${directInstructions(hook)}\n\nYour plan:\n<plan>${JSON.stringify(plan)}</plan>\n\n${repairInstructions(issues.map((i) => i.message))}`,
         effort: "medium",
+        maxTokens: 16_000,
       })
       calls.push({ step: "repair", model: res.model, usage: res.usage })
       const repaired = autoFix(res.data, input)
@@ -80,7 +81,8 @@ export function createDirector(call: StructuredCall) {
 
     const errors = issues.filter((i) => i.severity === "error")
     if (errors.length) throw new DirectorError("invalid_plan", `The plan still breaks ${errors.length} rule(s) after ${MAX_REPAIRS} repairs.`, errors)
-    return { hook, plan, ideation: idea.data, warnings: issues.map((i) => i.message), calls }
+    // Repairs work on the scene-only prompts; Higgsfield gets them with the shared look appended.
+    return { hook, plan: assemble(plan), ideation: idea.data, warnings: issues.map((i) => i.message), calls }
   }
 
   /** One rewrite of a prompt Higgsfield's moderation rejected (spec: rewrite and retry once). */

@@ -40,6 +40,9 @@ function createAuth() {
       },
     },
     socialProviders: google,
+    // Google verifies the email, so "Continue with Google" with the same address as an existing
+    // email-and-password account signs into that account instead of failing.
+    account: { accountLinking: { enabled: true, trustedProviders: ["google"] } },
     databaseHooks: {
       user: {
         create: {

@@ -20,7 +20,7 @@ export default function Home() {
           Videos for your channels. You approve every one.
         </h1>
         <p className="max-w-[52ch] text-body-lg text-muted-foreground">
-          Vidora makes short and long videos for YouTube and TikTok, then posts only the ones you approve.
+          Vidora makes short videos for YouTube Shorts, TikTok, and Facebook Reels, then posts only the ones you approve.
         </p>
         <div className="flex flex-wrap gap-3">
           <Button asChild>

@@ -24,9 +24,14 @@ const CONNECT_MESSAGES: Record<string, { tone: "success" | "danger"; title: stri
   "connect=missing_scope": {
     tone: "danger",
     title: "YouTube wasn't connected",
-    body: "We need permission to upload videos. Connect again and leave the upload box checked.",
+    body: "Google asked which permissions to give, and the YouTube boxes weren't ticked. Connect again and tick both YouTube permissions.",
   },
   "connect=no_channel": { tone: "danger", title: "No YouTube channel found", body: "That Google account doesn't have a channel yet. Create one on YouTube, then connect again." },
+  "connect=api_disabled": {
+    tone: "danger",
+    title: "The YouTube API is switched off",
+    body: "In Google Cloud, open APIs & Services → Library, search for YouTube Data API v3, and press Enable. Wait a minute, then connect again.",
+  },
   "connect=not_configured": { tone: "danger", title: "YouTube isn't set up yet", body: "Add GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET to .env." },
   "connect=forbidden": { tone: "danger", title: "You can't connect channels", body: "Ask a workspace owner or admin to connect YouTube." },
   "connect=failed": { tone: "danger", title: "YouTube wasn't connected", body: "Something went wrong on the way back from Google. Try connecting again." },

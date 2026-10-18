@@ -9,6 +9,7 @@ import { and, createDb, eq, getModel, ne, readProviderSecret, schema, upsertMode
 import { createClaudeCall, createDirector, type DirectorInput, type Plan } from "@vidora/director"
 import { HiggsfieldProvider, type CostEstimate, type VideoProvider } from "@vidora/providers"
 import { providerForCredential } from "./providers"
+import { pickVoice } from "./voice"
 import ffmpegPath from "ffmpeg-static"
 
 // End-to-end test: makes one real Short on your machine, no web app and no sign-in needed.
@@ -192,7 +193,8 @@ async function audioSeconds(file: string) {
   return m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : 0
 }
 
-const voice = process.env.ELEVENLABS_VOICE_ID ?? "JBFqnCBsd6RMkjVDRZzb"
+// The voice that sounds like the plan's narrator, unless ELEVENLABS_VOICE_ID picks one.
+const voice = process.env.ELEVENLABS_VOICE_ID ?? pickVoice(plan.narrator, slug) ?? "JBFqnCBsd6RMkjVDRZzb"
 for (const [i, s] of plan.scenes.entries()) {
   const out = path.join(outDir, `vo-${i + 1}.mp3`)
   if (!process.env.ELEVENLABS_API_KEY || existsSync(out) || !state.scenes[i]?.file) continue
@@ -275,7 +277,7 @@ function basicPlan(input: DirectorInput): Plan {
     duration_sec: d,
     voiceover_line: x.line,
     features_anchor: false,
-    shot: { shot_type: "medium shot", subject: "", action: "", setting: "", lighting: "soft natural light", camera_motion: move, lens_and_framing: "vertical", style, mood: "calm" },
+    shot: { shot_type: "medium shot", camera_motion: move, hero_moment: "" },
     prompt: x.prompt,
     negative_prompt: input.model.supportsNegativePrompt ? "text, captions, watermark, logo, distorted hands, blurry, flicker" : "",
     caption_words: x.line.split(" ").slice(0, 4).join(" "),
@@ -285,7 +287,9 @@ function basicPlan(input: DirectorInput): Plan {
     angle: "quick tip",
     hook: scenes[0]!.voiceover_line,
     subject_anchor: "",
+    narrator: { gender: "female", age: "young" },
     continuity: { palette: "soft neutrals", wardrobe_and_props: "", location: "bright home" },
+    look: { lighting: "soft natural light", color_grade: "soft neutrals", style, locks: "" }, // prompts above are already complete
     scenes,
     voiceover_script: scenes.map((s) => s.voiceover_line).join(" "),
     title: input.brief.topic.slice(0, 70),
