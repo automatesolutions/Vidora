@@ -6,7 +6,7 @@ substitutions:
   _APP_URL: https://vidora-web-657635713769.asia-southeast1.run.app
   _ENABLE_DESIGN_SYSTEM: "true"
   # White label: the operator workspace whose Higgsfield connection makes every customer's videos.
-  _PLATFORM_WORKSPACE_ID: ""
+  _PLATFORM_WORKSPACE_ID: "ws_01M501WJ3K762SAX38HJ2HXPYD"
   _IMAGE: ${_REGION}-docker.pkg.dev/${PROJECT_ID}/vidora/web
 
 options:
