@@ -58,11 +58,15 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   )
 }
 
+// List fields: one item per line or comma. Hashtags typed "#ipon #budget" also split before each #.
 const lines = (s: string) =>
   s
-    .split(/\n|,/)
+    .split(/\n|,|\s+(?=#)/)
     .map((x) => x.trim())
     .filter(Boolean)
+
+/** The fields on the Details step (step 2 of 5). */
+const DETAIL_FIELDS = new Set(["name", "topic", "audience", "tone", "language", "targetLengthSec", "cta", "hashtagSeeds", "bannedTopics", "product"])
 
 export function NewCampaignWizard({ channels }: { channels: { id: string; name: string }[] }) {
   const [step, setStep] = useState(0)
@@ -137,6 +141,15 @@ export function NewCampaignWizard({ channels }: { channels: { id: string; name: 
     if (s === 1 && mode === "original" && topic.trim().length < 3) return "Describe what the videos are about."
     if (s === 1 && mode === "product" && !product.name.trim()) return "Add the product name."
     if (s === 1 && mode === "product" && photos.length === 0) return "Add at least one product photo."
+    if (s === 1) {
+      const n = { cta: lines(cta).length, tags: lines(hashtags).length, banned: lines(banned).length }
+      if (n.cta > 5) return `Use up to 5 calls to action (you have ${n.cta}). Keep your best ones.`
+      if (n.tags > 10) return `Use up to 10 hashtag ideas (you have ${n.tags}). Keep your best ones.`
+      if (n.banned > 10) return `List up to 10 things to never mention (you have ${n.banned}).`
+      // The rest of this step's fields, checked with the same rules the server uses.
+      const issue = NewCampaignSchema.safeParse(input).error?.issues.find((i) => DETAIL_FIELDS.has(String(i.path[0])))
+      if (issue) return issue.message
+    }
     if (s === 2) {
       if (schedule.times.length === 0) return "Add a posting time."
       if (frequency === "three_per_week" && days.length !== 3) return "Pick three days."
@@ -154,7 +167,14 @@ export function NewCampaignWizard({ channels }: { channels: { id: string; name: 
 
   function submit() {
     const parsed = NewCampaignSchema.safeParse(input)
-    if (!parsed.success) return setError(parsed.error.issues[0]!.message)
+    if (!parsed.success) {
+      // Go back to the step where the problem can be fixed, and say what it is there.
+      const issue = parsed.error.issues[0]!
+      const field = String(issue.path[0])
+      const back = DETAIL_FIELDS.has(field) ? 1 : field === "schedule" ? 2 : field === "variationIntensity" || field === "lockedElements" ? 3 : step
+      setStep(back)
+      return setError(checkStep(back) ?? issue.message)
+    }
     setError(null)
     start(async () => {
       const r = await createCampaignAction(input)

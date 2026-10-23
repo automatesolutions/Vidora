@@ -9,6 +9,7 @@ import { HiggsfieldProvider, type CostEstimate, type VideoProvider } from "@vido
 import { diskCache } from "./audio-assets"
 import { renderShort } from "./render"
 import { speakExpressive } from "./voice"
+import { renderPageText } from "./page-render"
 import { engineKeyFromEnv } from "./engine-key"
 
 // End-to-end test: makes one real Short on your machine, no web app and no sign-in needed.
@@ -86,7 +87,7 @@ if (!state.plan) {
   }
   if (process.env.ANTHROPIC_API_KEY) {
     log("Director agent is planning the video (about a minute)…")
-    const r = await createDirector(createClaudeCall()).planRun(input)
+    const r = await createDirector(createClaudeCall(), { renderPage: renderPageText }).planRun(input)
     state.plan = r.plan
     state.hook = r.hook
     if (r.warnings.length) log("Plan warnings:\n- " + r.warnings.join("\n- "))

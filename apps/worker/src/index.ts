@@ -14,6 +14,7 @@ import { createQueues, QUEUE, redisConnection, sweepGenerations, sweepRuns, book
 import { advanceRun, type RunDeps } from "./run-engine"
 import { speakExpressive } from "./voice"
 import { syncEngineKey } from "./engine-key"
+import { renderPageText } from "./page-render"
 
 // AutoShorts worker: drives Higgsfield generations (submit → poll → download), keeps the model
 // registry fresh, books campaign slots, and takes each run from plan to a scheduled YouTube post.
@@ -60,7 +61,7 @@ const runDeps: RunDeps = {
   storage: { put: storage.put, getBytes: async (key) => (await storage.get(key)).Body!.transformToByteArray() },
   tokenKeys: tokenKeys(),
   providerFor: deps.providerFor,
-  director: () => (process.env.ANTHROPIC_API_KEY ? (director ??= createDirector(createClaudeCall())) : null),
+  director: () => (process.env.ANTHROPIC_API_KEY ? (director ??= createDirector(createClaudeCall(), { renderPage: renderPageText })) : null),
   speak: (line, voice) => speakExpressive(line, voice),
   publish: (input) => publishToYouTube({ db, tokenKeys: tokenKeys(), google: yt.google, audited: yt.audited }, input),
   workRoot: path.join(tmpdir(), "autoshorts-runs"),

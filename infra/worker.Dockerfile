@@ -1,7 +1,8 @@
 # AutoShorts worker image (compose `prod` profile). Build context: repo root.
 FROM node:22-alpine AS base
-# FFmpeg assembles each Short (scenes + voiceover + music + captions).
-RUN apk add --no-cache ffmpeg font-noto
+# FFmpeg assembles each Short (scenes + voiceover + music + captions). Chromium renders app-style
+# niche websites (single-page apps) that web fetch can't read (src/page-render.ts).
+RUN apk add --no-cache ffmpeg font-noto chromium
 RUN corepack enable
 WORKDIR /app
 

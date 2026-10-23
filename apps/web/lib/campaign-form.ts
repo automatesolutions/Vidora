@@ -14,9 +14,9 @@ export const NewCampaignSchema = z
     tone: text(120).optional(),
     language: z.enum(["en", "fil", "es", "pt", "fr", "de"]).default("en"),
     targetLengthSec: z.union([z.literal(15), z.literal(30), z.literal(45), z.literal(59)]).default(30),
-    cta: z.array(text(120)).max(5).default([]),
-    hashtagSeeds: z.array(text(40)).max(10).default([]),
-    bannedTopics: z.array(text(60)).max(10).default([]),
+    cta: z.array(text(120).max(120, "Keep each call to action under 120 characters.")).max(5, "Use up to 5 calls to action.").default([]),
+    hashtagSeeds: z.array(text(40).max(40, "Keep each hashtag idea under 40 characters.")).max(10, "Use up to 10 hashtag ideas.").default([]),
+    bannedTopics: z.array(text(60).max(60, "Keep each never-mention item under 60 characters.")).max(10, "List up to 10 things to never mention.").default([]),
     product: z
       .object({
         name: text(120).min(1, "Add the product name"),

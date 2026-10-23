@@ -2,7 +2,7 @@ import { HOOK_SIMILARITY_LIMIT, maxSimilarity, normalizeText } from "@vidora/cor
 import type { StructuredCall, StructuredResult } from "./claude"
 import { DirectorError } from "./claude"
 import { findSourceUrl, promptBudget, renderContext, type DirectorInput } from "./context"
-import { DIRECTOR_SYSTEM, directInstructions, IDEATE_INSTRUCTIONS, MODERATION_SYSTEM, moderationInstructions, repairInstructions, STUDY_SYSTEM, studyInstructions } from "./prompts"
+import { DIRECTOR_SYSTEM, directInstructions, IDEATE_INSTRUCTIONS, MODERATION_SYSTEM, moderationInstructions, repairInstructions, STUDY_SYSTEM, studyFromTextInstructions, studyInstructions } from "./prompts"
 import { IdeationSchema, NicheStudySchema, PlanSchema, RewriteSchema, type Ideation, type NicheStudy, type Plan } from "./schemas"
 import { assemble, autoFix, validatePlan, validatePrompt, type Issue } from "./validate"
 
@@ -25,7 +25,16 @@ export type DirectorResult = {
 
 const MAX_REPAIRS = 2
 
-export function createDirector(call: StructuredCall) {
+export type DirectorOptions = {
+  /** Visible text of a page rendered in a browser, for sites web fetch can't read (null when it can't render). */
+  renderPage?: (url: string) => Promise<string | null>
+}
+
+// Rendered pages shorter than this are empty shells; longer ones are cut to keep the request small.
+const MIN_RENDERED_CHARS = 200
+const MAX_RENDERED_CHARS = 40_000
+
+export function createDirector(call: StructuredCall, opts: DirectorOptions = {}) {
   async function ideate(input: DirectorInput, context: string, extra = "") {
     return call({ schema: IdeationSchema, system: DIRECTOR_SYSTEM, context, instructions: IDEATE_INSTRUCTIONS + extra, effort: "low", maxTokens: 8_000 })
   }
@@ -54,8 +63,24 @@ export function createDirector(call: StructuredCall) {
       webFetch: { domain: url.hostname.replace(/^www\./, "") },
     })
     calls.push({ step: "study", model: res.model, usage: res.usage })
-    if (!res.data.read_ok) throw new DirectorError("source_unreadable", `Couldn't read ${url.href}. Check that the page is public and loads without a login.`)
-    return res.data
+    if (res.data.read_ok) return res.data
+
+    // App-style sites draw their content with JavaScript, which web fetch doesn't run. Render the
+    // page in a browser (worker) and study its visible text instead.
+    const text = await opts.renderPage?.(url.href).catch(() => null)
+    if (text && text.trim().length >= MIN_RENDERED_CHARS) {
+      const rendered = await call({
+        schema: NicheStudySchema,
+        system: STUDY_SYSTEM,
+        context: studyFromTextInstructions(url.href, text.slice(0, MAX_RENDERED_CHARS)),
+        instructions: "Return your notes on the page.",
+        effort: "medium",
+        maxTokens: 16_000,
+      })
+      calls.push({ step: "study", model: rendered.model, usage: rendered.usage })
+      if (rendered.data.read_ok) return rendered.data
+    }
+    throw new DirectorError("source_unreadable", `Couldn't read ${url.href}. Check that the page is public and loads without a login.`)
   }
 
   async function planRun(input: DirectorInput): Promise<DirectorResult> {

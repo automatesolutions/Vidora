@@ -1,4 +1,4 @@
-export { createDirector, type Director, type DirectorResult } from "./director"
+export { createDirector, type Director, type DirectorOptions, type DirectorResult } from "./director"
 export { createClaudeCall, DirectorError, DEFAULT_DIRECTOR_MODEL, type StructuredCall, type StructuredRequest, type Effort } from "./claude"
 export { findSourceUrl, renderContext, SOURCE_NEGATIVE, targetSeconds, promptBudget, type DirectorInput, type DirectorBrief, type DirectorModel, type DirectorHistory } from "./context"
 export { validatePlan, validatePrompt, autoFix, type Issue } from "./validate"
