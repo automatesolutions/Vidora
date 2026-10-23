@@ -2,9 +2,9 @@ import { DEFAULT_POOLS, maxSimilarity, pickVariation, variationHash, type Variat
 import { describe, expect, it } from "vitest"
 import type { StructuredCall, StructuredRequest } from "./claude"
 import { DirectorError } from "./claude"
-import { AVOID_LINE, renderContext, type DirectorInput } from "./context"
+import { AVOID_LINE, findSourceUrl, SOURCE_NEGATIVE, renderContext, type DirectorInput } from "./context"
 import { createDirector } from "./director"
-import type { Ideation, Plan } from "./schemas"
+import type { Ideation, NicheStudy, Plan } from "./schemas"
 import { assemble, autoFix, validatePlan } from "./validate"
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -92,14 +92,15 @@ const ideation: Ideation = {
 }
 
 /** Fake Claude: answers from a queue per schema type and records every request. */
-function fakeCall(answers: { ideate?: Ideation[]; plans?: Plan[] }) {
+function fakeCall(answers: { study?: NicheStudy[]; ideate?: Ideation[]; plans?: Plan[] }) {
   const requests: StructuredRequest<unknown>[] = []
+  const studies = [...(answers.study ?? [])]
   const ideas = [...(answers.ideate ?? [])]
   const plans = [...(answers.plans ?? [])]
   const call: StructuredCall = async <T>(req: StructuredRequest<T>) => {
     requests.push(req as StructuredRequest<unknown>)
-    const isPlan = "scenes" in ((req.schema as unknown as { shape?: object }).shape ?? {})
-    const data = (isPlan ? plans.shift() : ideas.shift()) as T
+    const shape = (req.schema as unknown as { shape?: object }).shape ?? {}
+    const data = ("read_ok" in shape ? studies.shift() : "scenes" in shape ? plans.shift() : ideas.shift()) as T
     if (!data) throw new Error("fake ran out of answers")
     return { data, model: "claude-opus-5-5", usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 } }
   }
@@ -304,5 +305,62 @@ describe("director agent", () => {
     const err = await createDirector(call).planRun(input).catch((e) => e)
     expect(err.kind).toBe("no_fresh_hook")
     expect(requests[1]!.instructions).toMatch(/too close to ones already used/)
+  })
+
+  const study: NicheStudy = {
+    read_ok: true,
+    pages_read: ["https://deepwork.example.com/"],
+    brand_name: "DeepWork Club",
+    niche: "Focus coaching for remote workers",
+    audience: "remote workers who lose focus in the afternoon",
+    problem: "afternoon focus crashes",
+    brand_tone: 'calm and plain-spoken ("no hustle, just focus")',
+    sections: [{ name: "Hero", summary: "Focus for remote workers, no hustle." }],
+    offerings: [{ name: "Monthly plan", price: "$12/month", details: ["Daily focus sessions"] }],
+    benefits: ["Finish your work before 5 PM"],
+    offers: [],
+    proof: [],
+    faqs: [],
+    cta: "Start your free week",
+    visual_cues: "",
+    not_on_page: "No reviews or customer numbers.",
+  }
+
+  it("finds the niche source link in the description", () => {
+    expect(findSourceUrl("Niche source: https://deepwork.example.com/pricing. Make videos about it.")?.href).toBe("https://deepwork.example.com/pricing")
+    expect(findSourceUrl("Daily focus tips, no link")).toBeNull()
+  })
+
+  it("reads the linked page first and plans from its facts only", async () => {
+    const linked = { ...input, brief: { ...input.brief, topic: `${input.brief.topic}. Niche source: https://www.deepwork.example.com/` } }
+    const { call, requests } = fakeCall({ study: [study], ideate: [ideation], plans: [goodPlan()] })
+    const result = await createDirector(call).planRun(linked)
+    expect(requests).toHaveLength(3)
+    expect(requests[0]!.webFetch).toEqual({ domain: "deepwork.example.com" })
+    expect(requests[0]!.context).toContain("Niche source: https://www.deepwork.example.com/")
+    expect(requests[1]!.context).toContain("<niche_source>")
+    expect(requests[1]!.context).toContain("Monthly plan ($12/month): Daily focus sessions")
+    expect(requests[1]!.context).toContain("Not on the page (never invent): No reviews or customer numbers.")
+    expect(requests[2]!.context).toBe(requests[1]!.context)
+    expect(result.nicheStudy).toEqual(study)
+    expect(result.calls.map((c) => c.step)).toEqual(["study", "ideate", "direct"])
+    // Kling 3.0 has no negative prompt, so the link's avoid list rides inside every prompt.
+    expect(result.plan.scenes[0]!.prompt).toContain("AVOID ALSO: invented content")
+  })
+
+  it("adds the fixed niche source negatives only to videos made from a link", () => {
+    const withNegatives = { ...input, model: { ...input.model, supportsNegativePrompt: true } }
+    const fromLink = autoFix(goodPlan(), { ...withNegatives, nicheStudy: study }).scenes[0]!.negative_prompt
+    for (const term of SOURCE_NEGATIVE.split(", ")) expect(fromLink).toContain(term)
+    expect(fromLink.split(", ").filter((t) => t === "watermark")).toHaveLength(1) // no repeats with the base list
+    expect(autoFix(goodPlan(), withNegatives).scenes[0]!.negative_prompt).not.toContain("cookie banner")
+  })
+
+  it("stops instead of guessing when the linked page can't be read", async () => {
+    const linked = { ...input, brief: { ...input.brief, topic: "Niche source: https://deepwork.example.com/" } }
+    const { call, requests } = fakeCall({ study: [{ ...study, read_ok: false }] })
+    const err = await createDirector(call).planRun(linked).catch((e) => e)
+    expect(err.kind).toBe("source_unreadable")
+    expect(requests).toHaveLength(1)
   })
 })

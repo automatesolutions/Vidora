@@ -1,12 +1,13 @@
 import { HOOK_SIMILARITY_LIMIT, maxSimilarity, normalizeText } from "@vidora/core"
 import type { StructuredCall, StructuredResult } from "./claude"
 import { DirectorError } from "./claude"
-import { promptBudget, renderContext, type DirectorInput } from "./context"
-import { DIRECTOR_SYSTEM, directInstructions, IDEATE_INSTRUCTIONS, MODERATION_SYSTEM, moderationInstructions, repairInstructions } from "./prompts"
-import { IdeationSchema, PlanSchema, RewriteSchema, type Ideation, type Plan } from "./schemas"
+import { findSourceUrl, promptBudget, renderContext, type DirectorInput } from "./context"
+import { DIRECTOR_SYSTEM, directInstructions, IDEATE_INSTRUCTIONS, MODERATION_SYSTEM, moderationInstructions, repairInstructions, STUDY_SYSTEM, studyInstructions } from "./prompts"
+import { IdeationSchema, NicheStudySchema, PlanSchema, RewriteSchema, type Ideation, type NicheStudy, type Plan } from "./schemas"
 import { assemble, autoFix, validatePlan, validatePrompt, type Issue } from "./validate"
 
 // The director agent. For one run of a campaign:
+//   0. study   → when the description has a link, read that site and keep only its facts (Claude + web fetch)
 //   1. ideate  → 8 hook candidates (Claude)
 //   2. pick    → the freshest hook vs. this campaign's history (code)
 //   3. direct  → full shot plan with one Higgsfield prompt per scene (Claude)
@@ -17,8 +18,9 @@ export type DirectorResult = {
   hook: string
   plan: Plan
   ideation: Ideation
+  nicheStudy?: NicheStudy
   warnings: string[] // soft issues that survived the repairs
-  calls: { step: "ideate" | "direct" | "repair"; model: string; usage: StructuredResult<unknown>["usage"] }[]
+  calls: { step: "study" | "ideate" | "direct" | "repair"; model: string; usage: StructuredResult<unknown>["usage"] }[]
 }
 
 const MAX_REPAIRS = 2
@@ -40,9 +42,27 @@ export function createDirector(call: StructuredCall) {
     return scored[0]?.text ?? null
   }
 
+  /** Reads the niche source link so every fact in the video comes from the page. */
+  async function study(url: URL, calls: DirectorResult["calls"]) {
+    const res = await call({
+      schema: NicheStudySchema,
+      system: STUDY_SYSTEM,
+      context: studyInstructions(url.href),
+      instructions: "Return your notes on the page.",
+      effort: "medium",
+      maxTokens: 16_000,
+      webFetch: { domain: url.hostname.replace(/^www\./, "") },
+    })
+    calls.push({ step: "study", model: res.model, usage: res.usage })
+    if (!res.data.read_ok) throw new DirectorError("source_unreadable", `Couldn't read ${url.href}. Check that the page is public and loads without a login.`)
+    return res.data
+  }
+
   async function planRun(input: DirectorInput): Promise<DirectorResult> {
-    const context = renderContext(input)
     const calls: DirectorResult["calls"] = []
+    const sourceUrl = input.nicheStudy ? null : findSourceUrl(input.brief.topic)
+    if (sourceUrl) input = { ...input, nicheStudy: await study(sourceUrl, calls) }
+    const context = renderContext(input)
 
     let idea = await ideate(input, context)
     calls.push({ step: "ideate", model: idea.model, usage: idea.usage })
@@ -82,7 +102,7 @@ export function createDirector(call: StructuredCall) {
     const errors = issues.filter((i) => i.severity === "error")
     if (errors.length) throw new DirectorError("invalid_plan", `The plan still breaks ${errors.length} rule(s) after ${MAX_REPAIRS} repairs.`, errors)
     // Repairs work on the scene-only prompts; Higgsfield gets them with the shared look appended.
-    return { hook, plan: assemble(plan, input.model), ideation: idea.data, warnings: issues.map((i) => i.message), calls }
+    return { hook, plan: assemble(plan, input.model, !!input.nicheStudy), ideation: idea.data, nicheStudy: input.nicheStudy, warnings: issues.map((i) => i.message), calls }
   }
 
   /** One rewrite of a prompt Higgsfield's moderation rejected (spec: rewrite and retry once). */

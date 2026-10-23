@@ -1,4 +1,5 @@
 import type { Variation } from "@vidora/core"
+import type { NicheStudy } from "./schemas"
 
 // Everything the director knows about one run, and how it's shown to Claude. The system prompt is
 // fixed (and cached); this per-run context goes in the user message as tagged sections.
@@ -40,6 +41,21 @@ export type DirectorInput = {
   history: DirectorHistory
   /** The posting date in the campaign's time zone, e.g. "Friday, 16 October 2026". Lets the plan be timely. */
   postDate: string
+  /** What the director learned from the link in the campaign description (director.ts fills it). */
+  nicheStudy?: NicheStudy
+}
+
+/** The first web link in the campaign description: the niche source the director reads before planning. */
+export function findSourceUrl(topic: string): URL | null {
+  for (const match of topic.matchAll(/https?:\/\/[^\s<>"'()]+/gi)) {
+    try {
+      const url = new URL(match[0].replace(/[.,;:!?]+$/, ""))
+      if (url.hostname.includes(".")) return url
+    } catch {
+      // not a real URL; keep looking
+    }
+  }
+  return null
 }
 
 export const DEFAULTS = { language: "en", targetLengthSec: 30, maxLengthSec: 59, promptMaxChars: 2500 }
@@ -55,11 +71,11 @@ export function targetSeconds(brief: DirectorBrief) {
 }
 
 /** The prompt length we ask for: long enough for every labeled section (prompts.ts), inside the model's hard limit. */
-export function promptBudget(model: DirectorModel) {
+export function promptBudget(model: DirectorModel, nicheSource = false) {
   const hard = model.promptMaxChars ?? DEFAULTS.promptMaxChars
   const target = Math.min(3500, Math.round(hard * 0.88))
   // Models without a negative prompt get the AVOID line inside the prompt, so scenes get that much less.
-  const avoid = model.supportsNegativePrompt ? 0 : AVOID_LINE.length + 1
+  const avoid = model.supportsNegativePrompt ? 0 : avoidLine(nicheSource).length + 1
   return { min: Math.min(900, Math.round(hard * 0.4)), target, scene: Math.max(400, target - LOOK_CHARS - avoid), max: hard }
 }
 
@@ -80,6 +96,19 @@ export const BASE_NEGATIVE = [
 export const AVOID_LINE =
   "AVOID: phone screen visible, scrolling or swiping, app UI, gibberish text, fake logos, subtitles, watermark, robotic or jerky motion, floating body, morphing face, warped or extra fingers, uncanny eyes, frozen expression, sudden camera jumps."
 
+/** Added to the negative prompt of every video made from a niche source link. The same for every link (creator's list, 2026-10-23). */
+export const SOURCE_NEGATIVE =
+  "invented content, fake text, gibberish text, wrong product, wrong logo, content not from the page, blurry screenshot, cropped page, cookie banner, pop-up, loading screen, error page, scrolling, swiping, fast cursor movement, robotic movement, distorted hands, morphing face, watermark"
+
+/** SOURCE_NEGATIVE items that AVOID_LINE doesn't already cover, for models without a negative prompt. */
+const SOURCE_AVOID =
+  "AVOID ALSO: invented content, fake text, wrong product, wrong logo, content not from the page, blurry screenshot, cropped page, cookie banner, pop-up, loading screen, error page, fast cursor movement, distorted hands."
+
+/** The in-prompt avoid list (models without a negative prompt). */
+export function avoidLine(nicheSource = false) {
+  return nicheSource ? `${AVOID_LINE} ${SOURCE_AVOID}` : AVOID_LINE
+}
+
 /** About how long the shared look is once appended to each scene (validate.ts assemble). */
 export const LOOK_CHARS = 1320
 
@@ -95,7 +124,7 @@ export function renderContext(input: DirectorInput): string {
   const seconds = targetSeconds(b)
   const lang = b.language ?? DEFAULTS.language
   const words = Math.round(seconds * (SPEECH_RATE[lang.split("-")[0]!] ?? SPEECH_RATE.en!))
-  const budget = promptBudget(input.model)
+  const budget = promptBudget(input.model, !!input.nicheStudy)
 
   return `<campaign>
 Name: ${esc(input.brief.campaignName)}
@@ -140,7 +169,7 @@ ${list(input.brief.ctaOptions?.length ? input.brief.ctaOptions : input.brand?.ct
 Hashtag ideas: ${input.brief.hashtagSeeds?.length ? input.brief.hashtagSeeds.map(esc).join(", ") : "(none)"}
 Never mention or show: ${input.brief.bannedTopics?.length ? input.brief.bannedTopics.map(esc).join(", ") : "(nothing extra)"}
 </brand>
-${renderProduct(b)}
+${renderProduct(b)}${renderNicheSource(input.nicheStudy)}
 <recent_videos>
 Hooks already used (do not reuse or paraphrase closely):
 ${list(input.history.hooks.slice(0, 25))}
@@ -165,4 +194,36 @@ function renderProduct(b: DirectorBrief) {
     "</product>",
   ]
   return `\n${lines.filter((l) => l !== null).join("\n")}\n`
+}
+
+function renderNicheSource(n: NicheStudy | undefined) {
+  if (!n) return ""
+  const items = (xs: string[]) => (xs.length ? xs.map((x) => `- ${esc(x)}`).join("\n") : "(none on the page)")
+  const lines = [
+    "<niche_source>",
+    "Facts from the creator's link, read before this run. Use only these for names, prices, offers and claims.",
+    `Pages read: ${n.pages_read.map(esc).join(", ")}`,
+    `Brand: ${esc(n.brand_name || "(no name shown)")}`,
+    `Niche: ${esc(n.niche)}`,
+    `Audience: ${esc(n.audience)}`,
+    `Problem it solves: ${esc(n.problem)}`,
+    `Brand tone: ${esc(n.brand_tone)}`,
+    "Sections, in page order:",
+    items(n.sections.map((s) => `${s.name}: ${s.summary}`)),
+    "Products, services or plans:",
+    items(n.offerings.map((o) => `${o.name}${o.price ? ` (${o.price})` : ""}${o.details.length ? `: ${o.details.join("; ")}` : ""}`)),
+    "Benefits:",
+    items(n.benefits),
+    "Offers:",
+    items(n.offers),
+    "Reviews and proof (quote exactly or not at all):",
+    items(n.proof),
+    "FAQs:",
+    items(n.faqs.map((f) => `${f.q} ${f.a}`)),
+    `Call to action on the page: ${esc(n.cta || "(none)")}`,
+    `Visual cues the page gives: ${esc(n.visual_cues || "(none)")}`,
+    `Not on the page (never invent): ${esc(n.not_on_page || "(nothing noted)")}`,
+    "</niche_source>",
+  ]
+  return `\n${lines.join("\n")}\n`
 }

@@ -15,6 +15,8 @@ export type StructuredRequest<T> = {
   instructions: string
   effort: Effort
   maxTokens?: number
+  /** Lets Claude read pages on this site (server-side web fetch). Only URLs already in the request can be fetched. */
+  webFetch?: { domain: string; maxUses?: number }
 }
 
 export type StructuredResult<T> = {
@@ -27,7 +29,7 @@ export type StructuredCall = <T>(req: StructuredRequest<T>) => Promise<Structure
 
 export class DirectorError extends Error {
   constructor(
-    readonly kind: "refused" | "truncated" | "unparseable" | "invalid_plan" | "no_fresh_hook" | "api",
+    readonly kind: "refused" | "truncated" | "unparseable" | "invalid_plan" | "no_fresh_hook" | "source_unreadable" | "api",
     message: string,
     readonly details?: unknown
   ) {
@@ -44,33 +46,44 @@ export function createClaudeCall(opts: { client?: Anthropic; model?: string } = 
 
   return async <T>(req: StructuredRequest<T>): Promise<StructuredResult<T>> => {
     let message
-    try {
-      const stream = client.beta.messages.stream({
-        model,
-        max_tokens: req.maxTokens ?? 32_000,
-        // Safety classifiers can decline a request; "default" re-runs it on the model Anthropic
-        // recommends for that refusal category instead of failing the run.
-        betas: ["server-side-fallback-2026-07-01"],
-        fallbacks: "default",
-        thinking: { type: "adaptive" },
-        output_config: { effort: req.effort, format: betaZodOutputFormat(req.schema) },
-        system: [{ type: "text", text: req.system, cache_control: { type: "ephemeral" } }],
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: req.context, cache_control: { type: "ephemeral" } },
-              { type: "text", text: req.instructions },
-            ],
-          },
+    const messages: Anthropic.Beta.BetaMessageParam[] = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: req.context, cache_control: { type: "ephemeral" } },
+          { type: "text", text: req.instructions },
         ],
-      })
-      message = await stream.finalMessage()
+      },
+    ]
+    const tools: Anthropic.Beta.BetaToolUnion[] | undefined = req.webFetch
+      ? [{ type: "web_fetch_20260209", name: "web_fetch", allowed_domains: [req.webFetch.domain], max_uses: req.webFetch.maxUses ?? 6 }]
+      : undefined
+    try {
+      // A server-tool turn can pause mid-way (pause_turn); sending the partial answer back resumes it.
+      for (let turn = 0; turn < 4; turn++) {
+        const stream = client.beta.messages.stream({
+          model,
+          max_tokens: req.maxTokens ?? 32_000,
+          // Safety classifiers can decline a request; "default" re-runs it on the model Anthropic
+          // recommends for that refusal category instead of failing the run.
+          betas: ["server-side-fallback-2026-07-01"],
+          fallbacks: "default",
+          thinking: { type: "adaptive" },
+          output_config: { effort: req.effort, format: betaZodOutputFormat(req.schema) },
+          system: [{ type: "text", text: req.system, cache_control: { type: "ephemeral" } }],
+          ...(tools ? { tools } : {}),
+          messages,
+        })
+        message = await stream.finalMessage()
+        if (message.stop_reason !== "pause_turn") break
+        messages.push({ role: "assistant", content: message.content })
+      }
     } catch (err) {
       if (err instanceof Anthropic.APIError) throw new DirectorError("api", `Claude API error ${err.status ?? ""}: ${err.message}`, err)
       throw err
     }
 
+    if (!message || message.stop_reason === "pause_turn") throw new DirectorError("truncated", "Reading the page took too many turns.")
     if (message.stop_reason === "refusal") {
       throw new DirectorError("refused", `Claude declined to plan this video (${message.stop_details?.category ?? "no category"}).`, message.stop_details)
     }

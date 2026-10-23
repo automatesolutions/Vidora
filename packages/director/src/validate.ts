@@ -1,5 +1,5 @@
 import { jaccard, normalizeText, shingles } from "@vidora/core"
-import { AVOID_LINE, BASE_NEGATIVE, DEFAULTS, promptBudget, SHOT_SECONDS, SPEECH_RATE, targetSeconds, type DirectorInput, type DirectorModel } from "./context"
+import { avoidLine, BASE_NEGATIVE, SOURCE_NEGATIVE, DEFAULTS, promptBudget, SHOT_SECONDS, SPEECH_RATE, targetSeconds, type DirectorInput, type DirectorModel } from "./context"
 import type { Plan } from "./schemas"
 
 // Deterministic checks on a director plan. Messages are phrased as instructions because they go
@@ -39,9 +39,9 @@ function shotSize(t: string) {
  * The prompts we send: each scene's own sections, then the look written once for the whole video.
  * Models without a negative prompt also get the AVOID line, since nothing else would carry it.
  */
-export function assemble(plan: Plan, model: Pick<DirectorModel, "supportsNegativePrompt">): Plan {
+export function assemble(plan: Plan, model: Pick<DirectorModel, "supportsNegativePrompt">, nicheSource = false): Plan {
   const l = plan.look
-  const avoid = model.supportsNegativePrompt ? "" : ` ${AVOID_LINE}`
+  const avoid = model.supportsNegativePrompt ? "" : ` ${avoidLine(nicheSource)}`
   const tail = `LIGHTING: ${l.lighting.trim()} COLOR GRADE: ${l.color_grade.trim()} STYLE: ${l.style.trim()} ${OUTPUT_LINE} LOCKS: ${l.locks.trim()}${avoid}`
   return { ...plan, scenes: plan.scenes.map((s) => ({ ...s, prompt: `${s.prompt} ${tail}` })) }
 }
@@ -69,7 +69,7 @@ export function autoFix(plan: Plan, input: DirectorInput): Plan {
   const scenes = plan.scenes.map((s, i) => ({
     ...s,
     prompt: s.prompt.split(SHARED)[0]!.replace(/\s+/g, " ").trim(),
-    negative_prompt: input.model.supportsNegativePrompt ? mergeNegative(s.negative_prompt) : "",
+    negative_prompt: input.model.supportsNegativePrompt ? mergeNegative(s.negative_prompt, !!input.nicheStudy) : "",
     // Scene 1 is the cold open; every later scene needs a real transition.
     transition_in: i === 0 ? ("none" as const) : s.transition_in === "none" ? ("hard_cut" as const) : s.transition_in,
   }))
@@ -87,10 +87,10 @@ export function autoFix(plan: Plan, input: DirectorInput): Plan {
   }
 }
 
-/** The plan's negatives plus BASE_NEGATIVE, without repeats. */
-function mergeNegative(own: string) {
+/** The plan's negatives plus BASE_NEGATIVE (and SOURCE_NEGATIVE for niche source videos), without repeats. */
+function mergeNegative(own: string, nicheSource: boolean) {
   const seen = new Set<string>()
-  return [...own.split(","), ...BASE_NEGATIVE.split(",")]
+  return [...own.split(","), ...BASE_NEGATIVE.split(","), ...(nicheSource ? SOURCE_NEGATIVE.split(",") : [])]
     .map((t) => t.trim())
     .filter((t) => {
       const key = t.toLowerCase()
@@ -109,9 +109,9 @@ export function validatePlan(plan: Plan, input: DirectorInput, hook: string): Is
   const seconds = targetSeconds(input.brief)
   const lang = (input.brief.language ?? DEFAULTS.language).split("-")[0]!
   const rate = SPEECH_RATE[lang] ?? SPEECH_RATE.en!
-  const budget = promptBudget(input.model)
+  const budget = promptBudget(input.model, !!input.nicheStudy)
   const allowed = input.model.durations.length ? input.model.durations : [5]
-  const scenes = assemble(plan, input.model).scenes // check what Higgsfield will receive
+  const scenes = assemble(plan, input.model, !!input.nicheStudy).scenes // check what Higgsfield will receive
 
   // Structure
   if (scenes.length < 2) error("Use at least 2 scenes.")

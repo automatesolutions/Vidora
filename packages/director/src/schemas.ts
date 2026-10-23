@@ -4,6 +4,36 @@ import { z } from "zod"
 // rules a schema can't express (durations, prompt length, continuity, banned content …).
 // Field descriptions are part of the prompt: Claude reads them.
 
+export const NicheStudySchema = z.object({
+  read_ok: z.boolean().describe("True only when you actually fetched and read the page. False if every fetch failed or the page had no real content (login wall, error, empty shell)."),
+  pages_read: z.array(z.string()).describe("Every URL you fetched and read, the creator's link first."),
+  brand_name: z.string().describe("The brand or business name exactly as written on the page. Empty string if none is shown."),
+  niche: z.string().describe("The niche in one sentence, in your words, based only on the page."),
+  audience: z.string().describe("Who the page is talking to, from its wording and examples."),
+  problem: z.string().describe("The main problem or desire the page says it solves."),
+  brand_tone: z.string().describe("How the brand sounds (e.g. warm and plain-spoken, premium and calm), with two or three short phrases quoted from the page."),
+  sections: z
+    .array(z.object({ name: z.string(), summary: z.string().describe("What this section says, one or two sentences.") }))
+    .describe("The page's sections in the order they appear: headline/hero, then each section down to the footer."),
+  offerings: z
+    .array(
+      z.object({
+        name: z.string().describe("Product, service, or plan name exactly as written."),
+        price: z.string().describe("The price exactly as written, with currency and period. Empty string if no price is shown."),
+        details: z.array(z.string()).describe("Its features and what's included, as the page states them."),
+      })
+    )
+    .describe("Every product, service, or plan on the page."),
+  benefits: z.array(z.string()).describe("The outcomes the page promises, close to its own wording."),
+  offers: z.array(z.string()).describe("Discounts, free trials, guarantees, bonuses, deadlines, exactly as stated. Empty if none."),
+  proof: z.array(z.string()).describe("Reviews, testimonials, ratings, customer counts, quoted word for word with the name or source the page shows. Empty if none."),
+  faqs: z.array(z.object({ q: z.string(), a: z.string() })).describe("FAQ questions and answers as shown. Empty if none."),
+  cta: z.string().describe("The page's main call to action, word for word (e.g. \"Book a free call\")."),
+  visual_cues: z.string().describe("Settings, people, products, and colors the page itself describes or names (copy and image alt text). Empty string if the page doesn't say."),
+  not_on_page: z.string().describe("Facts a video might want but the page doesn't give (no prices, no reviews, no location...), so nobody invents them."),
+})
+export type NicheStudy = z.infer<typeof NicheStudySchema>
+
 export const IdeationSchema = z.object({
   hooks: z
     .array(
