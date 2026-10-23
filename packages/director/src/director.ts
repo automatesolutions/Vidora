@@ -82,7 +82,7 @@ export function createDirector(call: StructuredCall) {
     const errors = issues.filter((i) => i.severity === "error")
     if (errors.length) throw new DirectorError("invalid_plan", `The plan still breaks ${errors.length} rule(s) after ${MAX_REPAIRS} repairs.`, errors)
     // Repairs work on the scene-only prompts; Higgsfield gets them with the shared look appended.
-    return { hook, plan: assemble(plan), ideation: idea.data, warnings: issues.map((i) => i.message), calls }
+    return { hook, plan: assemble(plan, input.model), ideation: idea.data, warnings: issues.map((i) => i.message), calls }
   }
 
   /** One rewrite of a prompt Higgsfield's moderation rejected (spec: rewrite and retry once). */

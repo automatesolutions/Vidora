@@ -366,9 +366,22 @@ export const schedules = pgTable("schedules", {
 export type RunPlan = {
   concept: string
   hook: string
+  /** On-screen hook text, 6 words or fewer (plans before 2026-10-21 don't have it). */
+  hook_text?: string
+  open_loop?: { question: string; planted_in_scene: number; paid_off_in_scene: number }
+  loop_ending?: string
   subject_anchor: string
   narrator?: { gender: "female" | "male"; age: "young" | "middle_aged" | "old" }
-  scenes: { purpose: string; duration_sec: number; voiceover_line: string; prompt: string; negative_prompt: string; caption_words: string }[]
+  scenes: {
+    purpose: string
+    duration_sec: number
+    transition_in?: "none" | "hard_cut" | "whip_pan" | "match_cut"
+    voiceover_line: string
+    voiceover_performance?: string
+    prompt: string
+    negative_prompt: string
+    caption_words: string
+  }[]
   voiceover_script: string
   title: string
   description: string

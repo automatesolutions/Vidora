@@ -21,7 +21,7 @@ export type VariationIntensity = (typeof VARIATION_INTENSITIES)[number]
 
 /** Elements a user can lock so every run keeps them. */
 // Names match the variation engine's axes (variation.ts). A locked element keeps the value of the first run.
-export const LOCKABLE_ELEMENTS = ["voice", "visual_style", "camera_language", "caption_style", "music_mood", "script_angle", "cta"] as const
+export const LOCKABLE_ELEMENTS = ["voice", "visual_style", "color_grade", "camera_language", "caption_style", "music_mood", "script_angle", "cta"] as const
 export type LockableElement = (typeof LOCKABLE_ELEMENTS)[number]
 
 /**

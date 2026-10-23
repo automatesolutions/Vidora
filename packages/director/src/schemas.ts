@@ -18,14 +18,20 @@ export const IdeationSchema = z.object({
 export type Ideation = z.infer<typeof IdeationSchema>
 
 export const SceneSchema = z.object({
-  purpose: z.enum(["hook", "build", "payoff", "cta"]),
-  duration_sec: z.number().int().describe("Must be one of the model's allowed durations."),
+  purpose: z.enum(["hook", "build", "payoff", "cta"]).describe("The three beats: hook (0-2 s), build = escalation (raise the stakes, one step per shot), payoff (deliver the open loop), then cta."),
+  duration_sec: z.number().int().describe("One of the model's allowed durations, usually 3-5 s: fast pacing."),
+  transition_in: z
+    .enum(["none", "hard_cut", "whip_pan", "match_cut"])
+    .describe("How the edit enters this shot: none for scene 1 only. match_cut: this shot's FIRST FRAME repeats the shape, position or motion of the previous shot's last moment."),
   voiceover_line: z.string().describe("Exactly what the narrator says during this scene."),
+  voiceover_performance: z
+    .string()
+    .describe('The same line, word for word, with one or two ElevenLabs v4 audio tags in square brackets where the delivery shifts, e.g. "[excited] Three side jobs you can start tonight. [whispers] The first one surprised me."'),
   features_anchor: z.boolean().describe("True when the recurring subject described in subject_anchor appears in this shot."),
   // Short labels only; the detail lives in `prompt`, so nothing is written twice.
   shot: z.object({
-    shot_type: z.string().describe("e.g. extreme close-up, medium shot, wide shot, overhead."),
-    camera_motion: z.string().describe("Exactly one camera move (or locked off), using this run's camera language."),
+    shot_type: z.string().describe("wide, medium, close-up, or extreme close-up. Never the same size twice in a row."),
+    camera_motion: z.string().describe("Exactly one camera move, never static: slow push-in, handheld follow, low-angle tracking (level), lateral tracking, whip pan, dolly out."),
     hero_moment: z.string().describe("The shot's one peak in a few words, e.g. \"coins SLIDE OUT at 3.0s\"."),
   }),
   prompt: z.string().describe("This scene's sections only: SHOT, SUBJECT, LOCATION, FIRST FRAME, OPTICS, CAMERA, ACTION, PERFORMANCE, PHYSICS, AUDIO. We append the shared look."),
@@ -37,6 +43,15 @@ export const PlanSchema = z.object({
   concept: z.string().describe("The whole Short in one sentence."),
   angle: z.string(),
   hook: z.string().describe("The chosen hook, word for word."),
+  hook_text: z.string().describe("Bold on-screen text for the first 2 seconds: 6 words or fewer, creates curiosity or tension, adds to the spoken hook instead of repeating it."),
+  open_loop: z
+    .object({
+      question: z.string().describe("The question or promise planted in the first 5 seconds that the viewer needs answered."),
+      planted_in_scene: z.number().int().describe("0-based scene where the narration plants it (must start before 5 s)."),
+      paid_off_in_scene: z.number().int().describe("0-based scene where it's answered: one of the last two scenes."),
+    })
+    .describe("Keeps people watching to the end."),
+  loop_ending: z.string().describe("How the final shot satisfies and invites a rewatch: it echoes or flows back into the first frame (same subject, position or motion) so the loop feels seamless."),
   subject_anchor: z
     .string()
     .describe("A fixed visual description of the recurring subject or place, repeated word for word in every prompt that features it. Empty string if nothing recurs."),
@@ -50,9 +65,9 @@ export const PlanSchema = z.object({
   }),
   look: z
     .object({
-      lighting: z.string().describe("Motivated sources with direction, camera on the shadow side, \"WB locked ____K\". One or two sentences."),
-      color_grade: z.string().describe("Dominant tones plus one accent color tied to a source or surface. One sentence."),
-      style: z.string().describe("This run's visual style as photorealistic live action, with the realism and anti-CGI locks. One or two sentences."),
+      lighting: z.string().describe("Motivated sources with direction (golden-hour rim light, soft key, or moody practicals), camera on the shadow side, realistic shadows, \"WB locked ____K\". One or two sentences."),
+      color_grade: z.string().describe("This run's color grade from <this_run>, with the dominant tones and one accent tied to a source or surface; rich contrast, blacks not crushed. One sentence."),
+      style: z.string().describe("Full-frame cinema camera, 35mm or 50mm lens, shallow depth of field, natural lens flare, subtle film grain; photorealistic live action with true-to-life skin texture and fabric detail; NOT a 3D render, NOT CGI. One or two sentences."),
       locks: z.string().describe("Three to five short locks shared by every shot, separated by semicolons."),
     })
     .describe("Written once and appended by us to every scene's prompt, so all clips look like one shoot."),

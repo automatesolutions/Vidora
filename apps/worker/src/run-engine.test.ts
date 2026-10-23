@@ -16,6 +16,7 @@ import {
   recordSubmitted,
   runNow,
   saveHiggsfieldConnection,
+  saveProviderCredential,
   schema,
   upsertConnectedAccount,
   upsertModels,
@@ -34,7 +35,9 @@ const keys = tokenKeysFromEnv("1:" + "e".repeat(64))
 const scenePlan = (i: number) => ({
   purpose: (i === 0 ? "hook" : "cta") as "hook" | "cta",
   duration_sec: 3,
+  transition_in: (i === 0 ? "none" : "whip_pan") as "none" | "whip_pan",
   voiceover_line: i === 0 ? "Save first, spend second." : "Follow for more.",
+  voiceover_performance: "",
   features_anchor: false,
   shot: { shot_type: "", camera_motion: "slow push-in", hero_moment: "" },
   prompt: `Scene ${i} prompt, slow push-in, upright camera, level horizon, vertical 9:16 composition.`,
@@ -47,6 +50,9 @@ const directorResult: DirectorResult = {
     concept: "Pay yourself first.",
     angle: "quick how-to",
     hook: "Save first, spend second.",
+    hook_text: "PAYDAY GONE IN A WEEK?",
+    open_loop: { question: "Where does the money go?", planted_in_scene: 0, paid_off_in_scene: 1 },
+    loop_ending: "Back to the wallet.",
     subject_anchor: "",
     narrator: { gender: "female", age: "young" },
     continuity: { palette: "", wardrobe_and_props: "", location: "" },
@@ -92,7 +98,8 @@ suite("run engine (Postgres + FFmpeg, fake services)", () => {
     db = createDb(url, { max: 4 })
     workspaceId = newId("workspace")
     await db.insert(schema.workspaces).values({ id: workspaceId, name: "Run test", slug: workspaceId.toLowerCase() })
-    await saveHiggsfieldConnection(db, keys, workspaceId, { clientId: "c", accessToken: "a", refreshToken: null, expiresAt: null }, { plan: "plus", credits: 900 })
+    // The engine is always the API key (a test value; the fake provider never calls Higgsfield).
+    await saveProviderCredential(db, keys, workspaceId, "test-key-id:test-key-secret")
     await upsertConnectedAccount(db, keys, {
       workspaceId,
       platform: "youtube",
@@ -104,10 +111,10 @@ suite("run engine (Postgres + FFmpeg, fake services)", () => {
     })
     await upsertModels(db, [
       {
-        id: "kling3_0",
-        provider: "higgsfield_mcp",
+        id: "kling-video/v3.0/std/text-to-video",
+        provider: "higgsfield",
         family: "kling",
-        displayName: "Kling v3.0",
+        displayName: "Kling 3.0 Standard",
         workflow: "text-to-video",
         outputKind: "video",
         inputSchema: { properties: { prompt: { type: "string" }, duration: { type: "integer", minimum: 3, maximum: 15 }, aspect_ratio: { enum: ["9:16", "16:9"] }, sound: { enum: ["on", "off"] } } },
@@ -134,7 +141,17 @@ suite("run engine (Postgres + FFmpeg, fake services)", () => {
     }
   }, 60_000)
 
+  const extraWorkspaces: string[] = []
+  /** A customer workspace with no video connection of its own. */
+  async function customerWorkspace() {
+    const id = newId("workspace")
+    await db.insert(schema.workspaces).values({ id, name: "Customer", slug: id.toLowerCase() })
+    extraWorkspaces.push(id)
+    return id
+  }
+
   afterAll(async () => {
+    for (const id of extraWorkspaces) await db.delete(schema.workspaces).where(eq(schema.workspaces.id, id))
     await db.delete(schema.workspaces).where(eq(schema.workspaces.id, workspaceId))
     await db.close()
   })
@@ -241,6 +258,42 @@ suite("run engine (Postgres + FFmpeg, fake services)", () => {
     expect(attempts).toEqual([1, 2, 3])
     expect((await getRun(db, run.id))!.errorMessage).toMatch(/Scene 1 couldn't be generated/)
   }, 60_000)
+
+  it("makes a customer's video with the platform's connection when PLATFORM_WORKSPACE_ID is set", async () => {
+    const customer = await customerWorkspace()
+    const c = await campaign("auto", { workspaceId: customer })
+    const run = (await runNow(db, customer, c.id, now))!
+    const r = await advanceRun({ ...deps, platformWorkspaceId: workspaceId }, run.id)
+    expect(r!.status).toBe("generating")
+    const [platformCredential] = await db.select().from(schema.providerCredentials).where(eq(schema.providerCredentials.workspaceId, workspaceId))
+    const jobs = await generationJobsForRun(db, run.id)
+    expect(jobs.length).toBeGreaterThan(0)
+    expect(jobs.every((j) => j.credentialId === platformCredential!.id && j.workspaceId === customer)).toBe(true)
+  })
+
+  it("keeps engine trouble away from customers: neutral message, campaign keeps running, operator notified", async () => {
+    const customer = await customerWorkspace()
+    const operator = await customerWorkspace() // a platform workspace that isn't connected
+    const c = await campaign("auto", { workspaceId: customer })
+    const run = (await runNow(db, customer, c.id, now))!
+    const r = await advanceRun({ ...deps, platformWorkspaceId: operator }, run.id)
+    expect(r).toMatchObject({ status: "failed", errorCode: "no_provider" })
+    expect(r!.errorMessage).not.toMatch(/higgsfield/i)
+    const [row] = await db.select().from(schema.campaigns).where(eq(schema.campaigns.id, c.id))
+    expect(row!.status).toBe("active")
+    const alerts = await db.select().from(schema.notifications).where(eq(schema.notifications.workspaceId, operator))
+    expect(alerts.map((a) => a.type)).toEqual(["engine_attention"])
+  })
+
+  it("never makes videos with a Higgsfield plan connection, only the API key", async () => {
+    const planOnly = await customerWorkspace()
+    await saveHiggsfieldConnection(db, keys, planOnly, { clientId: "c", accessToken: "a", refreshToken: null, expiresAt: null }, { plan: "plus", credits: 900 })
+    const c = await campaign("auto", { workspaceId: planOnly })
+    const run = (await runNow(db, planOnly, c.id, now))!
+    const r = await advanceRun(deps, run.id)
+    expect(r).toMatchObject({ status: "failed", errorCode: "no_provider" })
+    expect(await generationJobsForRun(db, run.id)).toEqual([])
+  })
 
   it("fails clearly without the director key", async () => {
     const c = await campaign("auto")

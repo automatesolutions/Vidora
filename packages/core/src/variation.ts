@@ -9,29 +9,30 @@ import type { VariationIntensity } from "./campaign"
 /** Option pools for the axes the engine varies. Campaign settings can replace any pool. */
 export const DEFAULT_POOLS = {
   visual_style: [
-    // Every style is photorealistic live action; the director adds the realism locks (prompts.ts).
-    "cinematic natural light, shallow depth of field, fine film grain",
-    "bright airy daylight, soft window bounce, true-to-life color",
-    "moody low-key practical lighting, deep shadows, rich contrast",
-    "warm golden-hour tones, gentle lens flare, soft haze",
-    "cool blue-hour palette, calm and airy, soft contrast",
-    "handheld documentary realism, available light, natural colors",
-    "saturated warm-and-teal film look, punchy contrast, 35mm grain",
-    "muted pastel palette, soft overcast light, matte film finish",
-    "bold single-color accent against neutral surroundings, hard sunlight, crisp shadows",
-    "night city practicals, neon spill and wet reflections, anamorphic flares",
+    // Every style is photorealistic live action from a full-frame cinema camera; the director adds the
+    // lens, depth of field and realism locks (prompts.ts).
+    "golden-hour rim light from behind the subject, soft bounce fill, natural lens flare, subtle film grain",
+    "soft window key light, gentle falloff into shadow, true-to-life skin texture, subtle film grain",
+    "moody practical lights (lamps, screens, street light), deep but readable shadows, subtle film grain",
+    "overcast soft key outdoors, wet surfaces and fine haze, natural lens flare, subtle film grain",
+    "low sun through a doorway or blinds, hard motivated shafts of light, dust in the air, subtle film grain",
+    "night exterior with practical neon and sodium street light, wet reflections, anamorphic flares, subtle film grain",
+  ],
+  color_grade: [
+    "teal and orange: teal shadows, warm skin, rich contrast that never crushes the blacks",
+    "warm filmic: amber highlights, soft creamy midtones, gentle roll-off, rich contrast without crushed blacks",
+    "desaturated moody: muted colors, cool shadows, one warm accent, rich contrast without crushed blacks",
   ],
   camera_language: [
+    // Moves only: no static shots. Low angles track at a level horizon (tilts rendered sideways in testing).
     "slow push-in",
-    "smooth dolly out",
-    "slow orbit around the subject",
+    "handheld follow",
+    "low-angle tracking shot, camera level",
     "lateral tracking shot",
-    "crane up revealing the scene",
-    "gentle handheld follow",
-    "locked-off static frame with subject motion",
-    "low-angle static frame with subject walking toward camera",
+    "whip pan into the action, then settle",
+    "slow dolly out revealing the scene",
   ],
-  pacing: ["fast cuts, energetic", "steady and measured", "slow and calm"],
+  pacing: ["fast: a new shot or camera change every 1.5-2 s", "brisk: a new shot or camera change every 2-3 s"],
   script_angle: [
     "surprising fact",
     "myth versus truth",

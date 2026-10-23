@@ -101,6 +101,13 @@ describe("model input", () => {
     })
   })
 
+  it("never asks for more resolution than wanted when the exact one isn't offered", () => {
+    const seedance = { type: "object" as const, properties: { prompt: { type: "string" }, resolution: { type: "string", enum: ["480p", "720p", "1080p"] }, aspect_ratio: { type: "string", enum: ["9:16"] } } }
+    const odd = { type: "object" as const, properties: { prompt: { type: "string" }, resolution: { type: "string", enum: ["540p", "768p", "1080p"] }, aspect_ratio: { type: "string", enum: ["9:16"] } } }
+    expect(buildModelInput(seedance, { prompt: "p", durationSec: 5, aspectRatio: "9:16", resolution: "720p" }).resolution).toBe("720p")
+    expect(buildModelInput(odd, { prompt: "p", durationSec: 5, aspectRatio: "9:16", resolution: "720p" }).resolution).toBe("540p")
+  })
+
   it("only sends fields the model documents, and rounds duration up to an allowed value", () => {
     const body = buildModelInput(wanI2v, {
       prompt: "slow push in",

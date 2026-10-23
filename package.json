@@ -28,7 +28,9 @@
     "storage:seed": "node --env-file-if-exists=.env node_modules/tsx/dist/cli.mjs packages/storage/src/seed.ts",
     "models:refresh": "pnpm --filter @vidora/worker models:refresh",
     "director:try": "pnpm --filter @vidora/director try",
-    "video:test": "pnpm --filter @vidora/worker video:test"
+    "video:test": "pnpm --filter @vidora/worker video:test",
+    "video:rerender": "pnpm --filter @vidora/worker video:rerender",
+    "seedance:example": "pnpm --filter @vidora/worker seedance:example"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",

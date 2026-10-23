@@ -1,12 +1,13 @@
-import { siTiktok, siYoutube } from "simple-icons"
+import { siFacebook, siTiktok, siYoutube } from "simple-icons"
 import { cn } from "@/lib/utils"
 
 // ⊕ Platform chip. Official marks in one color (currentColor), as both brands' guidelines allow.
-export type Platform = "youtube" | "tiktok"
+export type Platform = "youtube" | "tiktok" | "facebook"
 
 const PLATFORMS = {
   youtube: { name: "YouTube", path: siYoutube.path },
   tiktok: { name: "TikTok", path: siTiktok.path },
+  facebook: { name: "Facebook", path: siFacebook.path },
 } as const
 
 export function PlatformIcon({ platform, className }: { platform: Platform; className?: string }) {

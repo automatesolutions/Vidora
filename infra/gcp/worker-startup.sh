@@ -36,6 +36,7 @@ STORAGE_ACCESS_KEY_ID=$(secret storage-access-key-id)
 STORAGE_SECRET_ACCESS_KEY=$(secret storage-secret-access-key)
 ANTHROPIC_API_KEY=$(secret anthropic-api-key)
 ELEVENLABS_API_KEY=$(secret elevenlabs-api-key)
+PLATFORM_WORKSPACE_ID=$(secret platform-workspace-id)
 GOOGLE_OAUTH_CLIENT_ID=$(secret google-oauth-client-id)
 GOOGLE_OAUTH_CLIENT_SECRET=$(secret google-oauth-client-secret)
 YOUTUBE_AUDITED=false

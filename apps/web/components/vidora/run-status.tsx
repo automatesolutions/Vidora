@@ -9,6 +9,7 @@ type Status = { label: string; icon: LucideIcon; tone: Tone; spin?: boolean }
 
 export const RUN_STATUS: Record<string, Status> = {
   planned: { label: "Booked", icon: Clock, tone: "default" },
+  starting: { label: "Starting", icon: Loader, tone: "brand", spin: true },
   generating: { label: "Generating", icon: Loader, tone: "brand", spin: true },
   assembling: { label: "Editing", icon: Loader, tone: "brand", spin: true },
   awaiting_approval: { label: "Needs approval", icon: CircleDot, tone: "warning" },
@@ -52,8 +53,8 @@ export const PAUSE_REASON: Record<string, string> = {
   user: "You paused it.",
   monthly_cap: "It reached its monthly credit limit.",
   run_cap: "A video would cost more than the limit per video.",
-  low_balance: "Your Higgsfield credits are low.",
-  bad_credentials: "Higgsfield isn't connected.",
+  low_balance: "Video generation is paused while credits are topped up.",
+  bad_credentials: "Video generation is briefly unavailable.",
   youtube_auth: "The YouTube login expired.",
   repeated_failures: "Several videos in a row didn't finish.",
 }

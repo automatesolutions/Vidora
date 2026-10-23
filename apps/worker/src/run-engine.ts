@@ -47,8 +47,10 @@ import {
 } from "@vidora/db"
 import { DirectorError, type Director, type DirectorInput } from "@vidora/director"
 import type { VideoProvider } from "@vidora/providers"
-import { assembleShort, grabFrame } from "./assemble"
+import { grabFrame } from "./assemble"
+import { storageCache, type AudioCache } from "./audio-assets"
 import { log } from "./log"
+import { renderShort } from "./render"
 import { DEFAULT_VOICES, pickVoice, type VoiceResult } from "./voice"
 import type { PublishOutcome } from "./youtube"
 
@@ -70,7 +72,12 @@ export type RunDeps = {
   providerFor: (credential: ProviderCredential) => VideoProvider
   /** Null when there's no ANTHROPIC_API_KEY: runs then fail with a clear message. */
   director: () => Director | null
+  /** ElevenLabs directly: the narration fallback when the Higgsfield voice isn't available. */
   speak: (text: string, voiceId: string) => Promise<VoiceResult>
+  /** Where music beds and sound effects are cached. Default: shared storage. */
+  audioCache?: AudioCache
+  /** The workspace whose Higgsfield connection makes every customer's videos (production). Unset: each workspace uses its own. */
+  platformWorkspaceId?: string | null
   publish: (input: {
     workspaceId: string
     videoId: string
@@ -89,7 +96,9 @@ export type RunDeps = {
 
 const SCENE_CHECK_MS = 15_000
 const PLANNING_LEASE_MS = 20 * 60_000 // a crashed planning step is picked up again after this
-const DEFAULT_MODEL = { higgsfield_mcp: "kling3_0", higgsfield: "kling-video/v3.0/std/text-to-video" } as const
+// The model when a campaign hasn't chosen one: Kling 3.0 Standard on the API key ($0.63 per 5 s clip,
+// checked 2026-10-23; Seedance 2.5 at 720p is $2.31). Product videos need its image-to-video variant.
+const DEFAULT_MODEL = { original: "kling-video/v3.0/std/text-to-video", product: "kling-video/v3.0/std/image-to-video" } as const
 const LOW_BALANCE_CREDITS = 20
 
 export async function advanceRun(deps: RunDeps, runId: string): Promise<Run | null> {
@@ -126,23 +135,18 @@ async function plan(deps: RunDeps, original: Run) {
   if (!c) return fail(deps, run, "no_campaign", "The campaign was deleted.")
   const { campaign, schedule } = c
 
-  const credential = await activeVideoCredential(deps.db, run.workspaceId)
-  if (!credential) {
-    await pauseCampaign(deps.db, campaign.id, "bad_credentials", "Connect Higgsfield in Connections.")
-    return fail(deps, run, "no_provider", "Higgsfield isn't connected. Open Connections and press Connect Higgsfield.")
-  }
+  const credential = await activeVideoCredential(deps.db, run.workspaceId, deps.platformWorkspaceId)
+  if (!credential) return engineTrouble(deps, run, "bad_credentials", "no_provider", "No Higgsfield API key. Put it in HF_CREDENTIALS in .env.local and restart the worker.")
   const director = deps.director()
   if (!director) return fail(deps, run, "no_director", "The director agent needs ANTHROPIC_API_KEY in .env to plan videos.")
   const provider = deps.providerFor(credential)
 
-  // Model: the campaign's choice, else the default for this connection.
-  const modelId = campaign.modelPrefs.allowed?.[0] ?? DEFAULT_MODEL[credential.provider]
-  let model = await getModel(deps.db, modelId)
-  if (!model && credential.provider === "higgsfield_mcp") {
-    await upsertModels(deps.db, (await provider.listModels()).map((e) => ({ ...e, provider: "higgsfield_mcp" as const })))
-    model = await getModel(deps.db, modelId)
-  }
-  if (!model) return fail(deps, run, "no_model", `Model ${modelId} isn't in the registry. Run pnpm models:refresh.`)
+  // Model: the campaign's choice when the API key can run it (older campaigns may name a plan-only
+  // model), else Kling 3.0 Standard.
+  const fallback = DEFAULT_MODEL[campaign.mode === "product" ? "product" : "original"]
+  const chosen = campaign.modelPrefs.allowed?.[0] ? await getModel(deps.db, campaign.modelPrefs.allowed[0]) : null
+  const model = chosen?.provider === credential.provider ? chosen : await getModel(deps.db, fallback)
+  if (!model) return fail(deps, run, "no_model", `Model ${fallback} isn't in the registry. Run pnpm models:refresh.`)
   const caps = capabilitiesFromSchema(model.inputSchema as ModelInputSchema)
 
   // Variation: rotate production choices, keep locked ones.
@@ -161,7 +165,7 @@ async function plan(deps: RunDeps, original: Run) {
   if (product) {
     const photos = await readyUploads(deps.db, run.workspaceId, product.imageUploadIds)
     if (photos.length === 0) return fail(deps, run, "no_photos", "This product campaign has no photos. Add at least one.")
-    if (!provider.uploadInput) return fail(deps, run, "no_image_upload", "This Higgsfield connection can't take product photos.")
+    if (!provider.uploadInput) return fail(deps, run, "no_image_upload", "Product photos can't be used right now. Try again later.")
     for (const [i, ph] of photos.entries()) {
       const data = await deps.storage.getBytes(ph.storageKey)
       photoRefs.push(await provider.uploadInput({ data, contentType: ph.mime, filename: `product-${i + 1}.${ph.mime.split("/")[1] ?? "jpg"}` }))
@@ -209,7 +213,7 @@ async function plan(deps: RunDeps, original: Run) {
       negativePrompt: s.negative_prompt || undefined,
       durationSec: s.duration_sec,
       aspectRatio: "9:16",
-      resolution: "1080p",
+      resolution: "720p", // cheaper than 1080p; the edit scales every clip to 1080x1920
       seed: Math.floor(Math.random() * 1_000_000_000),
       imageUrl: photoRefs.length ? photoRefs[i % photoRefs.length] : undefined,
       nativeAudio: true, // the model's own ambient sound sits under the voiceover
@@ -237,6 +241,8 @@ async function plan(deps: RunDeps, original: Run) {
     heldCredits: spend.heldCredits,
   })
   if (!decision.ok) {
+    // A low balance on the platform's own account is ours to top up, not the customer's.
+    if (decision.reason === "low_balance" && deps.platformWorkspaceId) return engineTrouble(deps, run, "low_balance", "engine_low_balance", decision.message)
     if (decision.reason !== "run_cap") await pauseCampaign(deps.db, campaign.id, decision.reason, decision.message)
     await notify(deps.db, { workspaceId: run.workspaceId, type: "run_skipped_budget", payload: { runId: run.id, campaignId: campaign.id, message: decision.message } })
     return stepRun(deps.db, run, { status: "skipped", finishedAt: now, errorCode: decision.reason, errorMessage: decision.message, nextCheckAt: null }, { name: "skipped_budget" })
@@ -300,11 +306,15 @@ async function watchScenes(deps: RunDeps, run: Run) {
     if (!["failed", "nsfw", "timed_out", "canceled"].includes(job.status)) continue
     // Out of credits or a bad key won't fix itself with a retry.
     if (job.errorKind === "no_credits" || job.errorKind === "bad_credentials") {
-      await pauseCampaign(deps.db, run.campaignId, job.errorKind === "no_credits" ? "low_balance" : "bad_credentials", job.errorMessage)
-      return fail(deps, run, job.errorKind, job.errorMessage ?? "Higgsfield refused the generation.")
+      return engineTrouble(deps, run, job.errorKind === "no_credits" ? "low_balance" : "bad_credentials", job.errorKind, job.errorMessage ?? "Higgsfield refused the generation.")
     }
     const decision = retryDecision(job.status, job.attempt, job.moderationRetries)
-    if (!decision.retry) return fail(deps, run, "scene_failed", `Scene ${scene + 1} couldn't be generated (${job.errorMessage ?? job.status}).`)
+    if (!decision.retry) {
+      // The provider's own wording stays in the logs; customers see a plain reason.
+      log.warn("scene gave up", { runId: run.id, scene, status: job.status, error: job.errorMessage })
+      const why = job.status === "nsfw" ? "was blocked by the content safety check" : job.status === "timed_out" ? "took too long" : "couldn't be generated"
+      return fail(deps, run, "scene_failed", `Scene ${scene + 1} ${why}. The next scheduled video will try a new idea.`)
+    }
     let input = job.input
     if (decision.rewritePrompt) {
       const director = deps.director()
@@ -355,24 +365,29 @@ async function assemble(deps: RunDeps, run: Run) {
   mkdirSync(workDir, { recursive: true })
   try {
     const jobs = await generationJobsForRun(deps.db, run.id)
-    const scenes = []
-    const voiceIssues: string[] = []
-    // A voice the creator locked wins; otherwise one that sounds like the on-screen person.
-    const voiceId = (c.campaign.lockedElements.includes("voice") ? run.variation?.voice : pickVoice(plan.narrator, run.id)) ?? run.variation?.voice ?? DEFAULT_VOICES[0]!
-    for (const [i, s] of plan.scenes.entries()) {
+    const clips: string[] = []
+    for (const [i] of plan.scenes.entries()) {
       const stored = jobs.filter((j) => j.sceneIndex === i && j.status === "stored").sort((a, b) => b.attempt - a.attempt)[0]
       if (!stored?.storageKey) return fail(deps, run, "scene_missing", `Scene ${i + 1}'s clip is missing.`)
       writeFileSync(path.join(workDir, `scene-${i + 1}.mp4`), await deps.storage.getBytes(stored.storageKey))
-      let voiceover: string | null = null
-      const voice = await deps.speak(s.voiceover_line, voiceId)
-      if (voice.ok) {
-        voiceover = `vo-${i + 1}.mp3`
-        writeFileSync(path.join(workDir, voiceover), voice.audio)
-      } else if (!voiceIssues.includes(voice.error)) voiceIssues.push(voice.error)
-      scenes.push({ clip: `scene-${i + 1}.mp4`, durationSec: s.duration_sec, caption: s.caption_words, voiceover })
+      clips.push(`scene-${i + 1}.mp4`)
     }
 
-    const { file, seconds } = await assembleShort(workDir, scenes, { nativeAudio: true })
+    // Narration: ElevenLabs directly (never a Higgsfield plan), with the campaign's locked voice if any.
+    const lockedVoice = c.campaign.lockedElements.includes("voice") ? run.variation?.voice : undefined
+    const { file, seconds, notes, voiceSource } = await renderShort({
+      workDir,
+      plan,
+      clips,
+      seed: run.id,
+      musicMood: run.variation?.music_mood,
+      voices: {
+        elevenlabs: deps.speak,
+        lockedElevenLabsVoice: lockedVoice && DEFAULT_VOICES.includes(lockedVoice) ? lockedVoice : undefined,
+      },
+      audioCache: deps.audioCache ?? storageCache(deps.storage),
+      nativeAudio: true,
+    })
     const thumbAt = plan.scenes.slice(0, plan.thumbnail_scene_index).reduce((t, s) => t + s.duration_sec, 0) + 1
     const thumb = await grabFrame(workDir, "final.mp4", thumbAt)
     const videoBytes = readFileSync(file)
@@ -403,7 +418,7 @@ async function assemble(deps: RunDeps, run: Run) {
       deps.db,
       run,
       { status: toApproval ? "awaiting_approval" : "uploading", nextCheckAt: toApproval ? null : now, stepAttempts: 0 },
-      { name: "assembled", payload: { seconds, credits, voice: voiceIssues.length ? voiceIssues : "ok" } }
+      { name: "assembled", payload: { seconds, credits, voice: voiceSource, notes } }
     )
   } finally {
     rmSync(workDir, { recursive: true, force: true })
@@ -470,14 +485,37 @@ async function youtubeAccountFor(deps: RunDeps, campaign: Campaign) {
 
 // ── failure ───────────────────────────────────────────────────────────────────
 
-async function fail(deps: RunDeps, run: Run, code: string, message: string, opts: { keepVideo?: boolean } = {}) {
+const INTERNAL_FAILURES = new Set(["no_director", "no_model", "no_provider", "no_image_upload"])
+
+/** What customers read when the video engine itself needs attention (platform mode). */
+export const ENGINE_UNAVAILABLE = "Video generation was briefly unavailable, so this video was skipped. We've been notified, and your next scheduled video runs as usual."
+
+/**
+ * The video engine can't work: no connection, an expired sign-in, or no credits. With our own
+ * platform account, that's ours to fix: the customer's campaign keeps running, the run fails with a
+ * neutral message (not counted toward pausing the campaign), and the operator gets a notification.
+ * Without one, the workspace owns its connection: pause the campaign and say what to fix.
+ */
+async function engineTrouble(deps: RunDeps, run: Run, reason: "bad_credentials" | "low_balance", code: string, detail: string) {
+  if (deps.platformWorkspaceId) {
+    log.error("video engine needs attention", { runId: run.id, workspaceId: run.workspaceId, code, detail })
+    await notify(deps.db, { workspaceId: deps.platformWorkspaceId, type: "engine_attention", payload: { runId: run.id, workspaceId: run.workspaceId, code, message: detail } })
+    return fail(deps, run, code, ENGINE_UNAVAILABLE, { countFailure: false })
+  }
+  await pauseCampaign(deps.db, run.campaignId, reason, detail)
+  return fail(deps, run, code, detail)
+}
+
+async function fail(deps: RunDeps, run: Run, code: string, message: string, opts: { keepVideo?: boolean; countFailure?: boolean } = {}) {
   const now = deps.now?.() ?? new Date()
   log.warn("run failed", { runId: run.id, code, message })
+  // Server setup problems read as plain unavailability to customers; the detail stays in the logs.
+  if (deps.platformWorkspaceId && INTERNAL_FAILURES.has(code)) message = ENGINE_UNAVAILABLE
   const row = await stepRun(deps.db, run, { status: "failed", finishedAt: now, errorCode: code, errorMessage: message, nextCheckAt: null }, { name: "failed", payload: { code, message } })
   if (row) {
     // A finished video that just couldn't be posted stays "ready" in the library.
     if (!opts.keepVideo) await setVideoStatus(deps.db, run.id, { status: "failed" })
-    const paused = await recordRunFailure(deps.db, run.campaignId)
+    const paused = opts.countFailure === false ? false : await recordRunFailure(deps.db, run.campaignId)
     await notify(deps.db, { workspaceId: run.workspaceId, type: "run_failed", payload: { runId: run.id, campaignId: run.campaignId, code, message, campaignPaused: paused } })
   }
   return row

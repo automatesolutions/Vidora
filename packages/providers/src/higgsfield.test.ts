@@ -1,7 +1,7 @@
 import { ProviderError } from "@vidora/core"
 import { describe, expect, it } from "vitest"
 import { extractSchema, familyLinks, parseWorkflowPage, workflowLinks } from "./higgsfield/catalog"
-import { HiggsfieldProvider, parseStatus } from "./higgsfield/provider"
+import { HiggsfieldProvider, parseStatus, priceFromDescription } from "./higgsfield/provider"
 
 // A fake Higgsfield: records every call and answers from a handler.
 type Call = { url: string; method: string; headers: Record<string, string>; body: unknown }
@@ -112,6 +112,24 @@ describe("HiggsfieldProvider", () => {
     const { f, calls } = fakeFetch(() => json(200, { credits: "12.500", usd: "0.781" }))
     expect(await make(f).estimateCost("kling-video/v3.0/std/text-to-video", { prompt: "x", duration: 5 })).toEqual({ credits: 12.5, usd: 0.781 })
     expect(new URL(calls[0]!.url).pathname).toBe("/estimate/kling-video/v3.0/std/text-to-video")
+  })
+
+  it("reads prices given as text (Seedance, Wan 3.0) and refuses when there's none", async () => {
+    const seedance25 =
+      "For 16:9 video without video input, your request costs roughly $0.2056 per second of generated video at 480p, $0.4622 at 720p, and $1.1372 at 1080p. Each 1,000 video tokens costs $0.0214 at 480p or 720p and $0.0234 at 1080p."
+    const wan30 = "Priced per generated second by resolution: 480p $0.05, 720p $0.10, or 1080p $0.20. Rates shown are before any applicable customer discount."
+    const tokensOnly = "Token-metered pricing. Each 1,000 video tokens costs $0.0214 at 480p or 720p and $0.0234 at 1080p."
+    expect(priceFromDescription(seedance25, { duration: 5, resolution: "720p" })).toBeCloseTo(2.311, 3)
+    expect(priceFromDescription(seedance25, { duration: 4, resolution: "480p" })).toBeCloseTo(0.8224, 4)
+    expect(priceFromDescription(wan30, { duration: 5, resolution: "720p" })).toBeCloseTo(0.5, 4)
+    // 5 s × 720 × 1280 × 24 / 1024 = 108,000 tokens × $0.0214 / 1,000
+    expect(priceFromDescription(tokensOnly, { duration: 5, resolution: "720p" })).toBeCloseTo(2.3112, 4)
+    expect(priceFromDescription("Contact sales.", { duration: 5 })).toBeNull()
+
+    const described = fakeFetch(() => json(200, { type: "description", pricing_description: seedance25 }))
+    expect(await make(described.f).estimateCost("bytedance/seedance-2.5/text-to-video", { prompt: "x", duration: 5, resolution: "720p" })).toEqual({ credits: 36.976, usd: 2.311 })
+    const unpriced = fakeFetch(() => json(200, { type: "description", pricing_description: "Contact sales." }))
+    await expect(make(unpriced.f).estimateCost("bytedance/seedance-2.5/text-to-video", { prompt: "x", duration: 5 })).rejects.toThrow(/didn't give a price/)
   })
 
   it("cancels while queued and reports false once processing started", async () => {

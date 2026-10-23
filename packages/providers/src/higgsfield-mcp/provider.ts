@@ -136,6 +136,30 @@ export class HiggsfieldMcpProvider implements VideoProvider {
     return { credits: Number(r.credits ?? 0), plan: r.subscription_plan_type ?? null }
   }
 
+  /**
+   * Narration with ElevenLabs v4 on the account's plan credits (about half a credit per line).
+   * `text` may carry v4 audio tags such as "[excited]" or "[whispers]"; they steer the delivery and
+   * aren't spoken. Waits for the audio (a few seconds) and returns the mp3.
+   */
+  async speak(text: string, voiceId: string, opts: { model?: string; timeoutMs?: number } = {}): Promise<Uint8Array> {
+    const plain = text.replace(/\[[^\]]*\]/g, " ").replace(/\s+/g, " ").trim()
+    const r = await this.tool<{ results?: { id?: string; status?: string; error?: string }[] }>("generate_audio", {
+      params: { model: opts.model ?? "elevenlabs_v4", prompt: plain, dialogue: [{ text, voice_type: "preset", voice_id: voiceId }] },
+      context: "Voiceover line for a scheduled AutoShorts Studio video.",
+    })
+    const jobId = r.results?.[0]?.id
+    if (!jobId) throw new ProviderError("invalid", r.results?.[0]?.error ?? "Higgsfield didn't start the voiceover.")
+    const deadline = Date.now() + (opts.timeoutMs ?? 120_000)
+    while (Date.now() < deadline) {
+      const w = await this.tool<{ jobs?: JobRow[] }>("jobs_wait", { jobs: [{ index: 0, job_id: jobId }], timeout_seconds: 15 })
+      const job = w.jobs?.[0]
+      const status = mapStatus(job?.status)
+      if (status === "completed" && job?.result_url) return (await downloadFile(this.f, job.result_url, 20 * 1024 * 1024)).data
+      if (status === "failed" || status === "nsfw" || status === "canceled") throw new ProviderError("invalid", job?.error ?? `The voiceover ${status}.`)
+    }
+    throw new ProviderError("retry_same", "The Higgsfield voiceover took too long.")
+  }
+
   // ── MCP plumbing ──────────────────────────────────────────────────────────
 
   /** A generation call that declines Higgsfield's preset suggestions: we always want our prompt as written. */

@@ -33,6 +33,7 @@ const DAYS = [
 const LOCKS: { value: LockableElement; label: string }[] = [
   { value: "voice", label: "Narrator voice" },
   { value: "visual_style", label: "Visual style" },
+  { value: "color_grade", label: "Color grade" },
   { value: "camera_language", label: "Camera style" },
   { value: "caption_style", label: "Caption style" },
   { value: "music_mood", label: "Music mood" },
@@ -63,7 +64,7 @@ const lines = (s: string) =>
     .map((x) => x.trim())
     .filter(Boolean)
 
-export function NewCampaignWizard({ channels, planConnected }: { channels: { id: string; name: string }[]; planConnected: boolean }) {
+export function NewCampaignWizard({ channels }: { channels: { id: string; name: string }[] }) {
   const [step, setStep] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [pending, start] = useTransition()
@@ -203,14 +204,6 @@ export function NewCampaignWizard({ channels, planConnected }: { channels: { id:
               { value: "clipping", label: "Clipping", description: "The best moments of your long videos, cut and reframed.", icon: Scissors, meta: "Coming soon", disabled: true },
             ]}
           />
-          {!planConnected && (
-            <InlineAlert tone="info" title="Connect Higgsfield before the first run">
-              Campaigns make videos through your Higgsfield account.{" "}
-              <Link href="/app/connections" className="text-primary-text underline underline-offset-4">
-                Open Connections
-              </Link>
-            </InlineAlert>
-          )}
         </section>
       )}
 
