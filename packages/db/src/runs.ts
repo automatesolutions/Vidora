@@ -183,12 +183,19 @@ export async function getCampaignWithSchedule(db: DbOrTx, campaignId: string) {
 }
 
 /** The credential a run generates with: the plan sign-in first, then a developer API key. */
-export async function activeVideoCredential(db: DbOrTx, workspaceId: string) {
+/**
+ * The credential that makes this workspace's videos. With a platform workspace (PLATFORM_WORKSPACE_ID
+ * in production), every workspace uses the platform's own connection: customers never connect or see
+ * a video provider. Without one (local development), each workspace uses its own.
+ */
+export async function activeVideoCredential(db: DbOrTx, workspaceId: string, platformWorkspaceId?: string | null) {
   const rows = await db
     .select()
     .from(providerCredentials)
-    .where(and(eq(providerCredentials.workspaceId, workspaceId), ne(providerCredentials.status, "invalid")))
-  return rows.find((r) => r.provider === "higgsfield_mcp") ?? rows.find((r) => r.provider === "higgsfield") ?? null
+    .where(and(eq(providerCredentials.workspaceId, platformWorkspaceId || workspaceId), ne(providerCredentials.status, "invalid")))
+  // Only the API key (HF_CREDENTIALS, pay as you go) makes videos. A Higgsfield plan sign-in is never
+  // used, so plan credits are never spent; without a key, runs stop instead.
+  return rows.find((r) => r.provider === "higgsfield") ?? null
 }
 
 export async function readyUploads(db: DbOrTx, workspaceId: string, ids: string[]) {

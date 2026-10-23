@@ -142,7 +142,7 @@ const sections: LegalSection[] = [
         <ul>
           <li>Hosting and databases: Vercel, Hetzner, Neon</li>
           <li>File storage: Cloudflare (R2)</li>
-          <li>AI providers: Anthropic (scripts), ElevenLabs (voice), and video and image model providers through fal.ai or Kie.ai</li>
+          <li>AI service providers that write scripts and generate the voiceover, music, and video for each Short</li>
           <li>Payments: Stripe</li>
           <li>Email: Resend</li>
           <li>Error tracking and product analytics: Sentry, PostHog</li>

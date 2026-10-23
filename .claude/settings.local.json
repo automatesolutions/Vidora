@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__claude_ai_Higgsfield__list_voices",
+      "mcp__claude_ai_Higgsfield__models_explore",
+      "mcp__claude_ai_Higgsfield__generate_audio",
+      "mcp__claude_ai_Higgsfield__jobs_wait",
+      "Bash(node --env-file=.env -e ' *)",
+      "Bash(git -C . log --oneline -5)",
+      "Bash(git checkout *)",
+      "Read(//c/Users/jonel/.claude/projects/c--Users-jonel-OneDrive-Desktop-Jonel-Projects-Vidora/**)",
+      "Bash(grep -o '\"name\":\"mcp__claude_ai_Higgsfield__generate_audio\",\"input\":{[^}]*}[^}]*}[^}]*}' 84d289c0-2291-45d4-a680-98a19b735a88.jsonl)",
+      "Bash(grep -o 'elevenlabs_v4[^\"]\\\\{0,300\\\\}' 84d289c0-2291-45d4-a680-98a19b735a88.jsonl)",
+      "Bash(pnpm -r --filter @vidora/worker --filter @vidora/director --filter @vidora/providers --filter @vidora/db typecheck)",
+      "Bash(sed -i '59,62s/, features_anchor:/, voiceover_performance: \"\", features_anchor:/' packages/director/src/director.test.ts)",
+      "Bash(pnpm -r --filter @vidora/worker --filter @vidora/director --filter @vidora/db typecheck)",
+      "Bash(sed -i 's/^    voiceover_line: x.line,$/    voiceover_line: x.line,\\\\n    voiceover_performance: x.line,/' apps/worker/src/test-video.ts)",
+      "Bash(grep -n \"── 4\\\\|── 5\\\\|^log\\(\\\\`\\\\\\\\\\\\\\\\nDone\" apps/worker/src/test-video.ts)",
+      "Bash(sed -i 's#    \"video:test\": \"tsx --env-file-if-exists=../../.env src/test-video.ts\"#    \"video:test\": \"tsx --env-file-if-exists=../../.env src/test-video.ts\",\\\\n    \"video:rerender\": \"tsx --env-file-if-exists=../../.env src/rerender.ts\"#' apps/worker/package.json)",
+      "Bash(pnpm --filter @vidora/worker typecheck)",
+      "Bash(pnpm video:rerender run_01M551RXDKH5A4T28VB362SR5M)",
+      "Bash(sed -i -e 's|\\\\\\\\\\\\\\\\fscx112\\\\\\\\\\\\\\\\fscy112}${t}|\\\\\\\\\\\\\\\\fscx108\\\\\\\\\\\\\\\\fscy108}${t}|' -e 's|Style: Caption,Montserrat ExtraBold,96,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,0,0,0,0,100,100,1,0,1,8,5,5,70,70,0,1|Style: Caption,Montserrat ExtraBold,140,\\\\&H00FFFFFF,\\\\&H00FFFFFF,\\\\&H00000000,\\\\&H80000000,0,0,0,0,100,100,1,0,1,10,6,5,60,60,0,1|' captions.ts)",
+      "Bash(sed -i 's|fscx112\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\fscy112}AI{|fscx108\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\fscy108}AI{|' captions.test.ts)"
+    ]
+  }
+}

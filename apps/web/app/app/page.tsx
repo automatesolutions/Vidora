@@ -1,14 +1,12 @@
 import { monthStart } from "@vidora/core"
-import { getDb, getHiggsfieldConnection, listCampaigns, listVideos, upcomingRuns, workspaceSpend } from "@vidora/db"
+import { getDb, listCampaigns, listVideos, upcomingRuns, workspaceSpend } from "@vidora/db"
 import { Plus } from "lucide-react"
 import Link from "next/link"
 import { Suspense } from "react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { InlineAlert } from "@/components/vidora/inline-alert"
 import { RUN_STATUS, StatusBadge } from "@/components/vidora/run-status"
 import { VideoCard } from "@/components/vidora/video-card"
-import { higgsfieldPlanStatus } from "@/lib/server/higgsfield"
 import { requireSession } from "@/lib/server/session"
 import { getStorage } from "@/lib/server/storage"
 
@@ -47,29 +45,19 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 async function Overview() {
   const s = await requireSession("/app")
   const db = getDb()
-  const [connection, campaigns, upcoming, videos, spend] = await Promise.all([
-    getHiggsfieldConnection(db, s.workspaceId),
+  const [campaigns, upcoming, videos, spend] = await Promise.all([
     listCampaigns(db, s.workspaceId),
     upcomingRuns(db, s.workspaceId, 6),
     listVideos(db, s.workspaceId, { limit: 3 }),
     workspaceSpend(db, s.workspaceId, monthStart("Asia/Manila")),
   ])
-  const plan = connection ? await higgsfieldPlanStatus(db, connection) : null
   const active = campaigns.filter((c) => c.campaign.status === "active").length
   const paused = campaigns.filter((c) => c.campaign.status === "paused").length
   const storage = getStorage()
 
   return (
     <>
-      {!connection && (
-        <InlineAlert tone="info" title="Connect Higgsfield to start making videos">
-          <Link href="/app/connections" className="text-primary-text underline underline-offset-4">
-            Open Connections
-          </Link>
-        </InlineAlert>
-      )}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Stat label="Higgsfield credits left" value={plan?.ok ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(plan.credits) : "—"} hint={plan?.ok && plan.plan ? `${plan.plan} plan` : undefined} />
+      <div className="grid gap-4 sm:grid-cols-2">
         <Stat label="Credits used this month" value={new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(spend.spentCredits)} hint={spend.heldCredits > 0 ? `${Math.round(spend.heldCredits)} more in progress` : undefined} />
         <Stat label="Campaigns" value={`${active} active`} hint={paused ? `${paused} paused` : undefined} />
       </div>

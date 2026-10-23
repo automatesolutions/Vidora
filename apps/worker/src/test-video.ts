@@ -1,29 +1,28 @@
-import { execFile } from "node:child_process"
 import { createHash } from "node:crypto"
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { createInterface } from "node:readline/promises"
-import { promisify } from "node:util"
 import { buildModelInput, capabilitiesFromSchema, DEFAULT_POOLS, pickVariation, tokenKeysFromEnv, type ModelInputSchema } from "@vidora/core"
-import { and, createDb, eq, getModel, ne, readProviderSecret, schema, upsertModels } from "@vidora/db"
+import { and, createDb, eq, getModel, ne, readProviderSecret, schema } from "@vidora/db"
 import { createClaudeCall, createDirector, type DirectorInput, type Plan } from "@vidora/director"
 import { HiggsfieldProvider, type CostEstimate, type VideoProvider } from "@vidora/providers"
-import { providerForCredential } from "./providers"
-import { pickVoice } from "./voice"
-import ffmpegPath from "ffmpeg-static"
+import { diskCache } from "./audio-assets"
+import { renderShort } from "./render"
+import { speakExpressive } from "./voice"
+import { engineKeyFromEnv } from "./engine-key"
 
 // End-to-end test: makes one real Short on your machine, no web app and no sign-in needed.
 //   pnpm video:test "Daily focus tips for remote workers"            (asks before spending)
 //   pnpm video:test "…" --seconds 15 --model kling-video/v3.0/std/text-to-video --yes
 //   --sound   turn on the video model's own generated sound (ambient audio, not narration)
 //
-// Needs: Connect Higgsfield in the app (plan credits), or a developer API key (HIGGSFIELD_API_KEY in .env).
+// Needs: the Higgsfield API key in HF_CREDENTIALS (.env.local). Never uses a Higgsfield plan.
 // Optional: ANTHROPIC_API_KEY (director agent writes the plan; otherwise a basic built-in plan),
-//           ELEVENLABS_API_KEY (+ ELEVENLABS_VOICE_ID) for the voiceover.
+//           ELEVENLABS_API_KEY for the narrator (eleven_v3), word timings, music and effects.
+// --music "<mood>" picks the music bed.
 // Output:   test-videos/<name>/final.mp4, plus the plan, every clip, and state.json.
 // Re-running the same command resumes: submitted generations are polled, never paid for twice.
 
-const run = promisify(execFile)
 const args = process.argv.slice(2)
 const flag = (name: string) => {
   const i = args.indexOf(`--${name}`)
@@ -50,39 +49,24 @@ const log = (...m: unknown[]) => console.log(...m)
 
 const db = createDb(process.env.DATABASE_URL, { max: 2 })
 const keys = tokenKeysFromEnv(process.env.TOKEN_ENCRYPTION_KEYS)
-// --via plan: your Higgsfield sign-in (plan credits). --via api: the developer API key. Default: plan if connected.
-const via = flag("via") ?? "auto"
-const [planConnection] = await db
-  .select()
-  .from(schema.providerCredentials)
-  .where(and(eq(schema.providerCredentials.provider, "higgsfield_mcp"), ne(schema.providerCredentials.status, "invalid")))
-  .limit(1)
-let provider: VideoProvider
-let usingPlan = false
-if (via !== "api" && planConnection) {
-  provider = providerForCredential(db, keys, planConnection)
-  usingPlan = true
-} else if (via === "plan") {
-  throw new Error("No Higgsfield sign-in yet. Open http://localhost:3010/app/connections and press Connect Higgsfield.")
-} else {
-  const [cred] = await db.select().from(schema.providerCredentials).where(and(eq(schema.providerCredentials.provider, "higgsfield"), ne(schema.providerCredentials.status, "invalid"))).limit(1)
-  const apiKey = process.env.HIGGSFIELD_API_KEY?.trim() || (cred ? readProviderSecret(cred, keys) : "")
-  if (!apiKey) throw new Error("No Higgsfield connection. Press Connect Higgsfield in Connections, or add HIGGSFIELD_API_KEY to .env.")
-  provider = new HiggsfieldProvider({ credentials: apiKey })
-}
+// Always the Higgsfield API key (prepaid API credits), never a plan sign-in: HF_CREDENTIALS from
+// .env.local, else the key the worker saved.
+const [cred] = await db.select().from(schema.providerCredentials).where(and(eq(schema.providerCredentials.provider, "higgsfield"), ne(schema.providerCredentials.status, "invalid"))).limit(1)
+const apiKey = engineKeyFromEnv() || (cred ? readProviderSecret(cred, keys) : "")
+if (!apiKey) throw new Error("No Higgsfield API key. Put it in HF_CREDENTIALS in .env.local (key-id:key-secret).")
+const provider: VideoProvider = new HiggsfieldProvider({ credentials: apiKey })
 const check = await provider.verifyCredentials()
 if (!check.ok) throw new Error(check.error)
-log(usingPlan ? "Using your Higgsfield plan credits (Connect Higgsfield)." : "Using your Higgsfield API key (prepaid API credits).")
+log("Using your Higgsfield API key (prepaid API credits).")
 if (!state.modelId) {
-  state.modelId = usingPlan ? "kling3_0" : "kling-video/v3.0/std/text-to-video"
+  state.modelId = "kling-video/v3.0/std/text-to-video"
   save()
 }
 
 let model = await getModel(db, state.modelId)
 if (!model) {
   log("Reading Higgsfield's model catalog (about 20 s)…")
-  if (usingPlan) await upsertModels(db, (await provider.listModels()).map((e) => ({ ...e, provider: "higgsfield_mcp" as const })))
-  else await (await import("./models-refresh")).refreshModels(db)
+  await (await import("./models-refresh")).refreshModels(db)
   model = await getModel(db, state.modelId)
 }
 if (!model) throw new Error(`Unknown model ${state.modelId}. Pick an id from model_registry with --model.`)
@@ -127,7 +111,7 @@ if (state.scenes.length === 0) {
       negativePrompt: s.negative_prompt || undefined,
       durationSec: s.duration_sec,
       aspectRatio: "9:16",
-      resolution: "1080p",
+      resolution: "720p",
       seed: Math.floor(Math.random() * 1_000_000),
       nativeAudio,
     }),
@@ -140,7 +124,7 @@ if (pending.length) {
   const costs: CostEstimate[] = []
   for (const s of pending) costs.push(await provider.estimateCost(model.id, s.input))
   const total = costs.reduce((a, c) => ({ credits: a.credits + c.credits, usd: a.usd + c.usd }), { credits: 0, usd: 0 })
-  log(`\nHiggsfield estimate for ${pending.length} clip(s): ${total.credits.toFixed(1)} ${usingPlan ? "plan credits" : `API credits (about $${total.usd.toFixed(2)})`}.`)
+  log(`\nHiggsfield estimate for ${pending.length} clip(s): ${total.credits.toFixed(1)} API credits (about $${total.usd.toFixed(2)}).`)
   if (!autoYes) {
     const rl = createInterface({ input: process.stdin, output: process.stdout })
     const answer = (await rl.question("Generate now and spend these credits? (y/N) ")).trim().toLowerCase()
@@ -180,81 +164,27 @@ while (state.scenes.some((s) => !s.file && !s.error)) {
   }
   if (state.scenes.some((s) => !s.file && !s.error)) await new Promise((r) => setTimeout(r, Math.min(5000 + (Date.now() - started) / 20, 15000)))
 }
-await db.close()
 const done = state.scenes.filter((s) => s.file)
 if (done.length === 0) throw new Error("No clips finished, so there's nothing to assemble.")
 
-// ── 4. Voiceover (ElevenLabs, optional) ─────────────────────────────────────
+// ── 4. Narration, captions, music, effects, FFmpeg (the same render a run uses) ──
 
-const ff = ffmpegPath as unknown as string
-async function audioSeconds(file: string) {
-  const r = await run(ff, ["-i", file, "-f", "null", "-"]).catch((e: { stderr?: string }) => ({ stderr: e.stderr ?? "" }))
-  const m = /Duration: (\d+):(\d+):([\d.]+)/.exec(r.stderr)
-  return m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : 0
-}
-
-// The voice that sounds like the plan's narrator, unless ELEVENLABS_VOICE_ID picks one.
-const voice = process.env.ELEVENLABS_VOICE_ID ?? pickVoice(plan.narrator, slug) ?? "JBFqnCBsd6RMkjVDRZzb"
-for (const [i, s] of plan.scenes.entries()) {
-  const out = path.join(outDir, `vo-${i + 1}.mp3`)
-  if (!process.env.ELEVENLABS_API_KEY || existsSync(out) || !state.scenes[i]?.file) continue
-  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice}?output_format=mp3_44100_128`, {
-    method: "POST",
-    headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY, "content-type": "application/json" },
-    body: JSON.stringify({ text: s.voiceover_line, model_id: "eleven_multilingual_v2" }),
-  })
-  if (!res.ok) {
-    log(`Voiceover for scene ${i + 1} failed (HTTP ${res.status}): ${(await res.text()).slice(0, 200)}`)
-    continue
-  }
-  writeFileSync(out, Buffer.from(await res.arrayBuffer()))
-}
-if (!process.env.ELEVENLABS_API_KEY) log("No ELEVENLABS_API_KEY: the video will be silent (add the key for a voiceover).")
-
-// ── 5. Assemble with FFmpeg: 1080x1920, captions, voice, then join ──────────
-
-const font = ["C:/Windows/Fonts/arialbd.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "/System/Library/Fonts/Supplemental/Arial Bold.ttf"].find(existsSync)
-if (font) copyFileSync(font, path.join(outDir, "caption-font.ttf"))
-const parts: string[] = []
-for (const [i, s] of plan.scenes.entries()) {
-  const clip = state.scenes[i]?.file
-  if (!clip) continue
-  const vo = path.join(outDir, `vo-${i + 1}.mp3`)
-  const hasVo = existsSync(vo)
-  const length = Math.max(s.duration_sec, hasVo ? (await audioSeconds(vo)) + 0.35 : 0)
-  const caption = s.caption_words.toUpperCase()
-  writeFileSync(path.join(outDir, `cap-${i + 1}.txt`), caption)
-  // Bold caps run about 0.62 em wide: shrink long captions so they stay inside 86% of the width.
-  const fontSize = Math.min(78, Math.floor((1080 * 0.86) / (Math.max(caption.length, 1) * 0.62)))
-  const captions = font
-    ? `,drawtext=fontfile=caption-font.ttf:textfile=cap-${i + 1}.txt:expansion=none:fontcolor=white:fontsize=${fontSize}:borderw=7:bordercolor=black:x=(w-text_w)/2:y=h*0.76`
-    : ""
-  const video = `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1,tpad=stop_mode=clone:stop_duration=${length}${captions},trim=0:${length.toFixed(2)},setpts=PTS-STARTPTS[v]`
-  // Audio: the voiceover, the model's own sound (--sound), both mixed with the voice on top, or silence.
-  const fit = `aformat=sample_rates=44100:channel_layouts=stereo,apad,atrim=0:${length.toFixed(2)},asetpts=PTS-STARTPTS`
-  const clipHasAudio = nativeAudio && /Audio:/.test((await run(ff, ["-i", clip], { cwd: outDir }).catch((e: { stderr?: string }) => ({ stderr: e.stderr ?? "" }))).stderr)
-  const audio = clipHasAudio && hasVo
-    ? `[0:a]volume=0.3,${fit}[n];[1:a]${fit}[vo];[n][vo]amix=inputs=2:duration=longest:normalize=0[a]`
-    : clipHasAudio
-      ? `[0:a]${fit}[a]`
-      : `[1:a]${fit}[a]`
-  const part = `part-${i + 1}.mp4`
-  await run(
-    ff,
-    [
-      "-y", "-i", clip,
-      ...(hasVo ? ["-i", path.basename(vo)] : ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"]),
-      "-filter_complex", `${video};${audio}`,
-      "-map", "[v]", "-map", "[a]", "-t", length.toFixed(2),
-      "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
-      part,
-    ],
-    { cwd: outDir, maxBuffer: 64 * 1024 * 1024 }
-  )
-  parts.push(part)
-}
-writeFileSync(path.join(outDir, "parts.txt"), parts.map((p) => `file '${p}'`).join("\n"))
-await run(ff, ["-y", "-f", "concat", "-safe", "0", "-i", "parts.txt", "-c", "copy", "-movflags", "+faststart", "final.mp4"], { cwd: outDir })
+const kept = plan.scenes.map((s, i) => ({ s, file: state.scenes[i]?.file })).filter((x) => x.file)
+const result = await renderShort({
+  workDir: outDir,
+  plan: { ...plan, scenes: kept.map((x) => x.s) },
+  clips: kept.map((x) => x.file!),
+  seed: slug,
+  musicMood: flag("music") ?? DEFAULT_POOLS.music_mood[0],
+  voices: {
+    elevenlabs: (line, voice) => speakExpressive(line, voice),
+    lockedElevenLabsVoice: process.env.ELEVENLABS_VOICE_ID,
+  },
+  audioCache: diskCache(path.resolve(process.cwd(), "../../test-videos/_audio-cache")),
+  nativeAudio,
+})
+await db.close()
+log(`Voice: ${JSON.stringify(result.voiceSource)}${result.notes.length ? `\nNotes: ${result.notes.join(" | ")}` : ""}`)
 
 log(`\nDone: ${path.join(outDir, "final.mp4")}`)
 log(`Title: ${plan.title}`)
@@ -265,19 +195,21 @@ if (done.length < plan.scenes.length) log(`${plan.scenes.length - done.length} s
 function basicPlan(input: DirectorInput): Plan {
   const style = input.variation.visual_style ?? "cinematic natural light"
   const move = input.variation.camera_language ?? "slow push-in"
-  const d = input.model.durations.find((x) => x >= 5) ?? input.model.durations.at(-1) ?? 5
+  const d = input.model.durations.find((x) => x >= 4) ?? input.model.durations.at(-1) ?? 4
   const shot = (subject: string, action: string, setting: string) =>
-    `Medium shot of ${subject}, ${action}, in ${setting}. Soft natural light, ${style}. ${move[0]!.toUpperCase()}${move.slice(1)}. Calm, focused mood, vertical 9:16 composition, subject centered in the upper frame.`
+    `${subject}, already ${action}, in ${setting}. Full-frame cinema camera, 35mm lens, shallow depth of field, ${style}. ${move[0]!.toUpperCase()}${move.slice(1)}, never static. Natural movement, true-to-life skin texture, vertical 9:16 composition, subject in the upper frame.`
   const scenes: Plan["scenes"] = [
-    { purpose: "hook", line: `Here's one idea about ${input.brief.topic.toLowerCase()} you can use today.`, prompt: shot("a person in a light grey sweater", "looking up from a notebook with a small smile", "a sunlit minimalist room with plants") },
-    { purpose: "payoff", line: "Start small, keep it simple, and do it every day.", prompt: shot("hands", "placing a ceramic mug on a wooden table as steam rises", "a quiet morning kitchen by a window") },
-    { purpose: "cta", line: "Follow for more.", prompt: shot("a window", "with sheer curtains moving gently in the breeze", "a bright apartment at golden hour") },
+    { purpose: "hook", size: "close-up", transition: "none", line: `Here's one idea about ${input.brief.topic.toLowerCase()} you can use today.`, prompt: shot("Close-up of a person in a light grey sweater", "looking up from a notebook with a small smile", "a sunlit minimalist room with plants") },
+    { purpose: "payoff", size: "extreme close-up", transition: "whip_pan", line: "Start small, keep it simple, and do it every day.", prompt: shot("Extreme close-up of hands", "placing a ceramic mug on a wooden table as steam rises", "a quiet morning kitchen by a window") },
+    { purpose: "cta", size: "wide", transition: "match_cut", line: "Follow for more.", prompt: shot("Wide shot of a window", "with sheer curtains moving gently in the breeze", "a bright apartment at golden hour") },
   ].map((x) => ({
     purpose: x.purpose as "hook" | "payoff" | "cta",
     duration_sec: d,
+    transition_in: x.transition as Plan["scenes"][number]["transition_in"],
     voiceover_line: x.line,
+    voiceover_performance: x.line,
     features_anchor: false,
-    shot: { shot_type: "medium shot", camera_motion: move, hero_moment: "" },
+    shot: { shot_type: x.size, camera_motion: move, hero_moment: "" },
     prompt: x.prompt,
     negative_prompt: input.model.supportsNegativePrompt ? "text, captions, watermark, logo, distorted hands, blurry, flicker" : "",
     caption_words: x.line.split(" ").slice(0, 4).join(" "),
@@ -286,6 +218,9 @@ function basicPlan(input: DirectorInput): Plan {
     concept: input.brief.topic,
     angle: "quick tip",
     hook: scenes[0]!.voiceover_line,
+    hook_text: "ONE IDEA. TODAY.",
+    open_loop: { question: "What is the idea?", planted_in_scene: 0, paid_off_in_scene: 1 },
+    loop_ending: "The window light leads back to the notebook.",
     subject_anchor: "",
     narrator: { gender: "female", age: "young" },
     continuity: { palette: "soft neutrals", wardrobe_and_props: "", location: "bright home" },

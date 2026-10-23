@@ -12,13 +12,17 @@ import { refreshModels } from "./models-refresh"
 import { publishToYouTube } from "./publish"
 import { createQueues, QUEUE, redisConnection, sweepGenerations, sweepRuns, bookCampaigns } from "./queues"
 import { advanceRun, type RunDeps } from "./run-engine"
-import { speak } from "./voice"
+import { speakExpressive } from "./voice"
+import { syncEngineKey } from "./engine-key"
 
 // AutoShorts worker: drives Higgsfield generations (submit → poll → download), keeps the model
 // registry fresh, books campaign slots, and takes each run from plan to a scheduled YouTube post.
 const db = createDb(env.DATABASE_URL, { max: 10 })
 const connection = redisConnection(env.REDIS_URL)
 const queues = createQueues(connection)
+
+// The engine's API key comes from the environment (HF_CREDENTIALS), so it's in place before any run.
+await syncEngineKey(db, tokenKeys(), process.env.PLATFORM_WORKSPACE_ID || null).catch((err) => log.error("engine key sync failed", { error: String(err) }))
 
 const storage = createStorage(storageEnvFrom(process.env))
 const deps: EngineDeps = {
@@ -57,9 +61,10 @@ const runDeps: RunDeps = {
   tokenKeys: tokenKeys(),
   providerFor: deps.providerFor,
   director: () => (process.env.ANTHROPIC_API_KEY ? (director ??= createDirector(createClaudeCall())) : null),
-  speak: (text, voice) => speak(text, voice),
+  speak: (line, voice) => speakExpressive(line, voice),
   publish: (input) => publishToYouTube({ db, tokenKeys: tokenKeys(), google: yt.google, audited: yt.audited }, input),
   workRoot: path.join(tmpdir(), "autoshorts-runs"),
+  platformWorkspaceId: process.env.PLATFORM_WORKSPACE_ID || null,
 }
 const runWorker = new Worker<{ id: string }>(
   QUEUE.runs,

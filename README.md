@@ -11,9 +11,9 @@ AutoShorts Studio turns one campaign into a steady stream of YouTube Shorts. You
 ## How a run works
 
 1. The scheduler picks the next posting slot for a campaign.
-2. The director agent (Claude) writes the hook, the scene plan, and the Higgsfield prompts.
+2. The director agent (Claude) writes the hook, an open loop, a fast plan of 3-5 s shots, and cinematic Higgsfield prompts (full-frame camera, 35/50mm lenses, motivated light, the run's color grade).
 3. Higgsfield renders each scene with your API key, inside the campaign's credit caps.
-4. ElevenLabs adds the voiceover, and FFmpeg assembles a 9:16 Short.
+4. ElevenLabs v4 on your Higgsfield connection reads the narration with emotion tags. FFmpeg then cuts a 9:16 Short with on-screen hook text, word-by-word captions, reframe cuts, whip pans, film grain, a ducked music bed and sound effects (see `apps/worker/src/render.ts`).
 5. The Short goes to Approvals, or straight to YouTube as private with a `publishAt` time.
 
 ## Layout
@@ -52,7 +52,7 @@ Service keys in `.env`:
 | Env var | What it turns on |
 |---|---|
 | `ANTHROPIC_API_KEY` | The director agent. Required for scheduled runs: without it, each run fails with `no_director`. |
-| `ELEVENLABS_API_KEY` | Voiceovers. |
+| `ELEVENLABS_API_KEY` | Caption word timings, music beds and sound effects (made once, then cached), and the fallback voice. |
 | `GOOGLE_OAUTH_CLIENT_ID` / `_SECRET` | YouTube connections. `ALLOW_FAKE_YOUTUBE=true` stubs YouTube for local testing. |
 | `RESEND_API_KEY` | Sign-in and notification emails. |
 
@@ -63,6 +63,7 @@ Stop the local stack with `pnpm stack:down`. Wipe the local database with `pnpm 
 ```bash
 pnpm director:try "Daily motivation for students"   # director plan only, a few Claude calls, no Higgsfield credits
 pnpm video:test "Daily focus tips for remote workers"   # one real Short end to end, asks before it spends credits
+pnpm video:rerender <runId>                         # re-render a run's stored clips with the current voice, captions and sound
 pnpm models:refresh                                 # reload the Higgsfield model list into model_registry
 ```
 

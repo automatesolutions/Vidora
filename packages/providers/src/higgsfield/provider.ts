@@ -71,8 +71,12 @@ export class HiggsfieldProvider implements VideoProvider {
   }
 
   async estimateCost(modelId: string, input: Record<string, unknown>): Promise<CostEstimate> {
-    const { body } = await this.call<{ credits?: unknown; usd?: unknown }>("POST", this.endpointPath("estimate/" + checkEndpoint(modelId)), { json: input })
-    return { credits: parseDecimal(body.credits), usd: parseDecimal(body.usd) }
+    const { body } = await this.call<{ credits?: unknown; usd?: unknown; pricing_description?: unknown }>("POST", this.endpointPath("estimate/" + checkEndpoint(modelId)), { json: input })
+    if (body.credits !== undefined || body.usd !== undefined) return { credits: parseDecimal(body.credits), usd: parseDecimal(body.usd) }
+    // Some models (Seedance, Wan 3.0) answer with a price description instead of numbers.
+    const usd = typeof body.pricing_description === "string" ? priceFromDescription(body.pricing_description, input) : null
+    if (usd === null) throw new ProviderError("invalid", `Higgsfield didn't give a price for ${modelId}, so the run won't start without one.`)
+    return { credits: Math.round((usd / USD_PER_CREDIT) * 1000) / 1000, usd: Math.round(usd * 1000) / 1000 }
   }
 
   async submitGeneration(req: SubmitRequest): Promise<Submission> {
@@ -246,4 +250,41 @@ export function parseStatus(raw: RawStatus, requestId: string, correlationId: st
     error: raw.error ?? null,
     correlationId,
   }
+}
+
+// ── Prices given as text ──────────────────────────────────────────────────────
+
+/** Higgsfield API credits are $0.0625 each (every numeric estimate: e.g. $0.630 = 10.080 credits). */
+export const USD_PER_CREDIT = 0.0625
+
+/** Output pixels per resolution for a vertical 9:16 Short (token-metered models price by pixels). */
+const FRAME: Record<string, [number, number]> = { "480p": [480, 854], "720p": [720, 1280], "1080p": [1080, 1920] }
+
+/**
+ * Dollars for one request, read from a model's `pricing_description` for the requested resolution
+ * and duration. Understands the two shapes Higgsfield uses (checked 2026-10-23):
+ *   per second: "… $0.2056 per second … at 480p, $0.4622 at 720p …" or "… 480p $0.05, 720p $0.10 …"
+ *   per token:  "Each 1,000 video tokens costs $0.0214 at 480p or 720p …", tokens = ceil(s × w × h × 24 / 1024)
+ * Null when it can't tell, so the caller refuses rather than guessing.
+ */
+export function priceFromDescription(description: string, input: Record<string, unknown>): number | null {
+  const text = description.replace(/\s+/g, " ")
+  const res = typeof input.resolution === "string" ? input.resolution : "720p"
+  const seconds = Number(input.duration ?? 5)
+  if (!Number.isFinite(seconds) || seconds <= 0) return null
+  const r = res.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const amount = String.raw`\$(\d+(?:\.\d+)?)`
+
+  if (/per (generated )?second/i.test(text)) {
+    const perSecond =
+      new RegExp(String.raw`${amount}(?: per second[^$,;]*?)? at ${r}\b`, "i").exec(text) ?? new RegExp(String.raw`\b${r} ${amount}`, "i").exec(text)
+    if (perSecond) return Number(perSecond[1]) * seconds
+  }
+  const perThousand = new RegExp(String.raw`1,000 video tokens costs? ${amount} at [^.$]*?\b${r}\b`, "i").exec(text)
+  const frame = FRAME[res]
+  if (perThousand && frame) {
+    const tokens = Math.ceil((seconds * frame[0] * frame[1] * 24) / 1024)
+    return (tokens / 1000) * Number(perThousand[1])
+  }
+  return null
 }

@@ -1,7 +1,7 @@
 import { newId, runNowSlot, upcomingSlots, type PauseReason, type ScheduleInput } from "@vidora/core"
 import { and, asc, desc, eq, gt, inArray } from "drizzle-orm"
 import type { DbOrTx } from "./client"
-import { campaigns, runs, schedules, type Campaign, type CampaignBrief, type ModelPrefs, type Schedule } from "./schema"
+import { campaigns, generationJobs, runs, schedules, videos, type Campaign, type CampaignBrief, type ModelPrefs, type Schedule } from "./schema"
 import { inWorkspace } from "./scoped"
 
 // Campaigns and their schedules. A campaign is set up once; the scheduler books one run per posting
@@ -170,6 +170,28 @@ export async function listRuns(db: DbOrTx, workspaceId: string, campaignId: stri
     .where(inWorkspace(runs, workspaceId, eq(runs.campaignId, campaignId), opts.from ? gt(runs.slotAt, opts.from) : undefined))
     .orderBy(desc(runs.slotAt))
     .limit(opts.limit ?? 30)
+}
+
+/** How many scene clips each run has finished (a scene counts once, whatever its retries). */
+export async function runSceneProgress(db: DbOrTx, runIds: string[]): Promise<Map<string, number>> {
+  const done = new Map<string, number>()
+  if (runIds.length === 0) return done
+  const rows = await db
+    .selectDistinct({ runId: generationJobs.runId, sceneIndex: generationJobs.sceneIndex })
+    .from(generationJobs)
+    .where(and(inArray(generationJobs.runId, runIds), eq(generationJobs.status, "stored")))
+  for (const r of rows) if (r.runId) done.set(r.runId, (done.get(r.runId) ?? 0) + 1)
+  return done
+}
+
+/** The finished video of each run, for thumbnails and links. */
+export async function videosForRuns(db: DbOrTx, workspaceId: string, runIds: string[]) {
+  if (runIds.length === 0) return new Map<string, { thumbnailKey: string | null; youtubeUrl: string | null }>()
+  const rows = await db
+    .select({ runId: videos.runId, thumbnailKey: videos.thumbnailKey, youtubeUrl: videos.youtubeUrl })
+    .from(videos)
+    .where(inWorkspace(videos, workspaceId, inArray(videos.runId, runIds)))
+  return new Map(rows.filter((r) => r.runId).map((r) => [r.runId!, { thumbnailKey: r.thumbnailKey, youtubeUrl: r.youtubeUrl }]))
 }
 
 export async function cancelPlannedRun(db: DbOrTx, workspaceId: string, runId: string) {

@@ -4,6 +4,7 @@ import { exchangeCode, HiggsfieldMcpProvider } from "@vidora/providers"
 import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 import { HF_CONNECT_COOKIE, higgsfieldRedirectUri } from "@/lib/server/higgsfield"
+import { isOperator } from "@/lib/server/platform"
 import { getAppSession } from "@/lib/server/session"
 import { appUrl, oauthStateSecret } from "@/lib/server/youtube"
 
@@ -23,6 +24,7 @@ export async function GET(req: Request) {
   if (!st || !ck || ck.n !== st.n) return back("higgsfield=failed")
   const s = await getAppSession()
   if (!s || s.userId !== st.u || s.workspaceId !== st.w) return back("higgsfield=failed")
+  if (!isOperator(s.workspaceId)) return NextResponse.redirect(new URL("/app/connections", appUrl()))
   if (url.searchParams.get("error")) return back("higgsfield=denied")
   const code = url.searchParams.get("code")
   if (!code) return back("higgsfield=failed")

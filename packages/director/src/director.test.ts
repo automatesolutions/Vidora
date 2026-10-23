@@ -2,10 +2,10 @@ import { DEFAULT_POOLS, maxSimilarity, pickVariation, variationHash, type Variat
 import { describe, expect, it } from "vitest"
 import type { StructuredCall, StructuredRequest } from "./claude"
 import { DirectorError } from "./claude"
-import { renderContext, type DirectorInput } from "./context"
+import { AVOID_LINE, renderContext, type DirectorInput } from "./context"
 import { createDirector } from "./director"
 import type { Ideation, Plan } from "./schemas"
-import { autoFix, validatePlan } from "./validate"
+import { assemble, autoFix, validatePlan } from "./validate"
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -20,7 +20,7 @@ const input: DirectorInput = {
     audience: "remote workers aged 22-40",
     tone: "calm, smart, encouraging",
     language: "en",
-    targetLengthSec: 30,
+    targetLengthSec: 20,
     ctaOptions: ["Follow for a new focus tip every day"],
     bannedTopics: ["caffeine pills"],
   },
@@ -30,7 +30,7 @@ const input: DirectorInput = {
   postDate: "Friday, 16 October 2026",
 }
 
-const shot = (camera = "slow push-in") => ({ shot_type: "medium close-up", camera_motion: camera, hero_moment: "she SHUTS the laptop at 2.0s" })
+const shot = (shot_type: string, camera = "slow push-in") => ({ shot_type, camera_motion: camera, hero_moment: "she SHUTS the laptop at 2.0s" })
 
 // A scene prompt in the labeled-section format (prompts.ts). The shared look is appended by assemble().
 const prompt = (subject: string, firstFrame: string, action: string) =>
@@ -56,15 +56,18 @@ const LOOK: Plan["look"] = {
 
 function goodPlan(): Plan {
   const scenes: Plan["scenes"] = [
-    { purpose: "hook", duration_sec: 5, voiceover_line: `${HOOK}`, features_anchor: true, shot: shot(), prompt: prompt(ANCHOR, "she is already slumping toward the laptop screen, one hand rubbing her eyes.", "0.0-2.0s: her shoulders sink lower. 2.0-3.5s: her forehead DROPS onto her folded arms. 3.5-5.0s: a long, heavy exhale."), negative_prompt: "", caption_words: "3 PM crash" },
-    { purpose: "build", duration_sec: 8, voiceover_line: "Your focus runs in cycles of about ninety minutes, and most of us push straight through the dip.", features_anchor: true, shot: shot(), prompt: prompt(`seen from overhead, ${ANCHOR}`, "her hands are already drifting from the keyboard toward a cooling mug among scattered notes.", "0.0-3.0s: fingers hover over the keys, unsure. 3.0-5.5s: she PUSHES the mug aside and steam thins out. 5.5-8.0s: her hand returns to the keyboard and stalls."), negative_prompt: "", caption_words: "90-minute cycles" },
-    { purpose: "payoff", duration_sec: 10, voiceover_line: "Instead, stand up, walk to a window, and look at something far away for two minutes. Your attention resets faster than any scroll break.", features_anchor: true, shot: shot("slow push-in"), prompt: prompt(ANCHOR, "she is already standing at the tall window, seen from behind her shoulder, clouds drifting over the rooftops.", "0.0-4.0s: she rolls her shoulders back. 4.0-6.0s: she LIFTS her gaze to the far horizon. 6.0-10.0s: her breathing slows and her hands loosen at her sides."), negative_prompt: "", caption_words: "Look far away" },
-    { purpose: "cta", duration_sec: 5, voiceover_line: "Follow for a new focus tip every day.", features_anchor: false, shot: shot(), prompt: prompt("a ceramic mug of tea on a sunlit oak windowsill", "steam is already curling upward as a breeze moves a sheer curtain.", "0.0-2.0s: steam rises in a thin ribbon. 2.0-3.5s: the curtain BILLOWS and the steam swirls. 3.5-5.0s: the air settles and steam straightens."), negative_prompt: "", caption_words: "Daily focus tips" },
+    { purpose: "hook", duration_sec: 4, transition_in: "none", voiceover_line: `${HOOK}`, voiceover_performance: `[serious] ${HOOK}`, features_anchor: true, shot: shot("close-up"), prompt: prompt(ANCHOR, "she is already slumping toward the laptop screen, one hand rubbing her eyes.", "0.0-1.5s: her shoulders sink lower. 1.5-2.5s: her forehead DROPS onto her folded arms. 2.5-4.0s: a long, heavy exhale."), negative_prompt: "", caption_words: "3 PM crash" },
+    { purpose: "build", duration_sec: 5, transition_in: "hard_cut", voiceover_line: "Your focus runs in ninety-minute cycles. Most of us push through the dip.", voiceover_performance: "", features_anchor: true, shot: shot("wide"), prompt: prompt(`seen from overhead, ${ANCHOR}`, "her hands are already drifting from the keyboard toward a cooling mug among scattered notes.", "0.0-1.5s: fingers hover over the keys, unsure. 1.5-3.5s: she PUSHES the mug aside and steam thins out. 3.5-5.0s: her hand returns to the keyboard and stalls."), negative_prompt: "", caption_words: "90-minute cycles" },
+    { purpose: "payoff", duration_sec: 5, transition_in: "whip_pan", voiceover_line: "Instead, look at something far away for two minutes. Your attention resets.", voiceover_performance: "[pause] Instead, look at something far away for two minutes. [confident] Your attention resets.", features_anchor: true, shot: shot("medium"), prompt: prompt(ANCHOR, "she is already standing at the tall window, seen from behind her shoulder, clouds drifting over the rooftops.", "0.0-1.5s: she rolls her shoulders back. 1.5-3.0s: she LIFTS her gaze to the far horizon. 3.0-5.0s: her breathing slows and her hands loosen at her sides."), negative_prompt: "", caption_words: "Look far away" },
+    { purpose: "cta", duration_sec: 4, transition_in: "match_cut", voiceover_line: "Follow for a new focus tip every day.", voiceover_performance: "", features_anchor: false, shot: shot("extreme close-up"), prompt: prompt("a ceramic mug of tea on a sunlit oak windowsill", "steam is already curling upward as a breeze moves a sheer curtain.", "0.0-1.5s: steam rises in a thin ribbon. 1.5-2.5s: the curtain BILLOWS and the steam swirls. 2.5-4.0s: the air settles and steam straightens."), negative_prompt: "", caption_words: "Daily focus tips" },
   ]
   return {
     concept: "The afternoon slump is a natural focus cycle, and a two-minute far-gaze break resets it.",
     angle: "common mistake and the fix",
     hook: HOOK,
+    hook_text: "WHY 3 PM BREAKS YOU",
+    open_loop: { question: "What is the reason nobody told you?", planted_in_scene: 0, paid_off_in_scene: 2 },
+    loop_ending: "The steam curls up past the window where scene 1's slump began, so the loop flows back to her desk.",
     subject_anchor: ANCHOR,
     narrator: { gender: "female", age: "young" },
     continuity: { palette: "warm amber and oak", wardrobe_and_props: "rust-orange knit sweater, ceramic mug", location: "bright apartment home office" },
@@ -201,6 +204,46 @@ describe("plan validator", () => {
     expect(fixed.scenes[0]!.negative_prompt).toBe("")
   })
 
+  it("holds the plan to the attention rules: hook text, open loop, pacing, moving camera, varied sizes", () => {
+    const p = goodPlan()
+    p.hook_text = "This is the reason why your focus always crashes"
+    p.open_loop = { ...p.open_loop, planted_in_scene: 2, paid_off_in_scene: 1 }
+    p.scenes[0]!.duration_sec = 7
+    p.scenes[1]!.duration_sec = 9
+    p.scenes[1]!.shot = { ...p.scenes[1]!.shot, camera_motion: "locked-off static frame" }
+    p.scenes[2]!.shot = { ...p.scenes[2]!.shot, shot_type: "wide shot" }
+    const messages = validatePlan(autoFix(p, input), input, HOOK).map((i) => i.message).join("\n")
+    expect(messages).toMatch(/hook_text has 9 words/)
+    expect(messages).toMatch(/Plant the open loop in the first 5 seconds/)
+    expect(messages).toMatch(/Pay off the open loop in one of the last two scenes/)
+    expect(messages).toMatch(/Scene 1 \(the hook\) runs 7 s/)
+    expect(messages).toMatch(/Scene 2: 9 s is slow for a Short/)
+    expect(messages).toMatch(/Scene 2: no static shots/)
+    expect(messages).toMatch(/Scene 3: same shot size as the scene before/)
+  })
+
+  it("auto-fixes transitions and always adds the base negatives", () => {
+    const p = goodPlan()
+    p.scenes[0]!.transition_in = "whip_pan"
+    p.scenes[1]!.transition_in = "none"
+    const withNegatives = { ...input, model: { ...input.model, supportsNegativePrompt: true } }
+    p.scenes[0]!.negative_prompt = "Blurry, rain"
+    const fixed = autoFix(p, withNegatives)
+    expect(fixed.scenes[0]!.transition_in).toBe("none")
+    expect(fixed.scenes[1]!.transition_in).toBe("hard_cut")
+    expect(fixed.scenes[0]!.negative_prompt).toMatch(/^Blurry, rain, phone screen visible, mobile screen content, scrolling, swiping/)
+    expect(fixed.scenes[0]!.negative_prompt).toContain("text overlay")
+    expect(fixed.scenes[0]!.negative_prompt.split(", ").filter((t) => t.toLowerCase() === "blurry")).toHaveLength(1) // no repeats
+  })
+
+  it("puts the avoid list in the prompt only for models without a negative prompt (Kling 3.0)", () => {
+    const plan = autoFix(goodPlan(), input)
+    expect(assemble(plan, { supportsNegativePrompt: false }).scenes[0]!.prompt).toContain(AVOID_LINE)
+    expect(assemble(plan, { supportsNegativePrompt: true }).scenes[0]!.prompt).not.toContain("AVOID:")
+    // The AVOID line names text and logos, but it isn't a request for them.
+    expect(validatePlan(plan, input, HOOK)).toEqual([])
+  })
+
   it("warns when the narration can't fit the time", () => {
     const p = goodPlan()
     p.scenes[1]!.voiceover_line = "word ".repeat(80)
@@ -217,7 +260,7 @@ describe("director agent", () => {
     expect(ctx).toContain("Negative prompt: not supported")
     expect(ctx).toContain("Script angle: common mistake and the fix")
     expect(ctx).toContain("- Stop checking your phone first thing in the morning.")
-    expect(ctx).toContain("about 75 words")
+    expect(ctx).toContain("about 50 words")
   })
 
   it("skips used hooks, prefers the run's angle, and returns a valid plan in two calls", async () => {

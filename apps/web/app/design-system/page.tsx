@@ -16,6 +16,7 @@ import { EmptyState } from "@/components/vidora/empty-state"
 import { InlineAlert } from "@/components/vidora/inline-alert"
 import { Logo, LogoMark } from "@/components/vidora/logo"
 import { PipelineStepper } from "@/components/vidora/pipeline-stepper"
+import { RunProgressCard } from "@/components/vidora/run-progress"
 import { PlatformChip, PlatformIcon } from "@/components/vidora/platform-chip"
 import { STATUS, StatusPill, type VideoStatus } from "@/components/vidora/status-pill"
 import { ThemeToggle } from "@/components/vidora/theme-toggle"
@@ -452,6 +453,27 @@ export default function DesignSystemPage() {
                 <Sub title="Pipeline · failed at voice">
                   <PipelineStepper current={2} failed />
                 </Sub>
+                {/* Fixed times so the demo renders the same every time. */}
+                {[
+                  { title: "Run progress · starting (Run now pressed)", status: "planned", scenesTotal: 0, scenesDone: 0, startedAt: null },
+                  { title: "Run progress · planning", status: "generating", scenesTotal: 0, scenesDone: 0, startedAt: new Date("2026-10-23T04:00:00Z") },
+                  { title: "Run progress · scene clips 3 of 6", status: "generating", scenesTotal: 6, scenesDone: 3, startedAt: new Date("2026-10-23T03:56:00Z") },
+                  { title: "Run progress · editing", status: "assembling", scenesTotal: 6, scenesDone: 6, startedAt: new Date("2026-10-23T03:49:00Z") },
+                  { title: "Run progress · posting", status: "uploading", scenesTotal: 6, scenesDone: 6, startedAt: new Date("2026-10-23T03:47:00Z") },
+                ].map((d) => (
+                  <Sub key={d.title} title={d.title}>
+                    <RunProgressCard
+                      status={d.status}
+                      title={d.scenesTotal ? "3 AI Side Jobs You Can Start During Nap Time" : null}
+                      hook={d.scenesTotal ? "Three AI side jobs you can start during nap time. Number one surprised me." : null}
+                      scenesTotal={d.scenesTotal}
+                      scenesDone={d.scenesDone}
+                      startedAt={d.startedAt}
+                      estimateCredits={d.scenesTotal ? 60 : null}
+                      now={new Date("2026-10-23T04:01:00Z")}
+                    />
+                  </Sub>
+                ))}
                 <Sub title="Action bar · desktop">
                   <ApprovalDemo layout="desktop" />
                 </Sub>

@@ -18,6 +18,9 @@ const nextConfig: NextConfig = {
   partialPrefetching: true,
   transpilePackages: ["@vidora/core", "@vidora/db", "@vidora/providers"],
   serverExternalPackages: ["postgres"],
+  experimental: {
+    agentUpgrade: "security",
+  },
   turbopack: {
     rules: {
       "*.css": {

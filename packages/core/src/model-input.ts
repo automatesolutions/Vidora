@@ -80,8 +80,10 @@ function pickResolution(prop: JsonSchemaProp | undefined, want: string | undefin
   const options = (prop?.enum ?? []).map(String)
   if (options.length === 0) return undefined
   if (want && options.includes(want)) return want
-  // Otherwise the highest that doesn't exceed 1080p (we export 1080x1920), else the default.
-  const ok = options.filter((r) => RESOLUTION_ORDER.indexOf(r) !== -1 && RESOLUTION_ORDER.indexOf(r) <= RESOLUTION_ORDER.indexOf("1080p"))
+  // Otherwise the highest that doesn't exceed what was asked (default 1080p, our export size), else the
+  // model's default. Never more than asked: resolution sets the price.
+  const cap = RESOLUTION_ORDER.indexOf(want && RESOLUTION_ORDER.includes(want) ? want : "1080p")
+  const ok = options.filter((r) => RESOLUTION_ORDER.indexOf(r) !== -1 && RESOLUTION_ORDER.indexOf(r) <= cap)
   return ok.sort((a, b) => RESOLUTION_ORDER.indexOf(b) - RESOLUTION_ORDER.indexOf(a))[0] ?? (prop?.default as string | undefined)
 }
 

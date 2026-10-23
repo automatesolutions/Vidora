@@ -5,6 +5,7 @@ import { authorizationUrl } from "@vidora/providers"
 import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 import { HF_CONNECT_COOKIE, higgsfieldClientId, higgsfieldRedirectUri } from "@/lib/server/higgsfield"
+import { isOperator } from "@/lib/server/platform"
 import { canEdit, getAppSession } from "@/lib/server/session"
 import { appUrl, oauthStateSecret } from "@/lib/server/youtube"
 
@@ -14,6 +15,8 @@ export async function GET(req: Request) {
   const url = new URL(req.url)
   const s = await getAppSession()
   if (!s) return NextResponse.redirect(new URL(`/sign-in?next=${encodeURIComponent(url.pathname)}`, appUrl()))
+  // Only the operator connects the video engine; customers never see it.
+  if (!isOperator(s.workspaceId)) return NextResponse.redirect(new URL("/app/connections", appUrl()))
   if (!canEdit(s)) return NextResponse.redirect(new URL("/app/connections?higgsfield=forbidden", appUrl()))
 
   let target: { url: string; codeVerifier: string }
