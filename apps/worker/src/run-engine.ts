@@ -202,7 +202,11 @@ async function plan(deps: RunDeps, original: Run) {
   try {
     result = await director.planRun(input)
   } catch (err) {
-    if (err instanceof DirectorError) return fail(deps, run, `director_${err.kind}`, err.message)
+    if (err instanceof DirectorError) {
+      // The broken rules are what we need to fix the director; the customer only sees the message.
+      if (err.details) log.warn("director gave up", { runId: run.id, kind: err.kind, details: err.details })
+      return fail(deps, run, `director_${err.kind}`, err.message)
+    }
     throw err
   }
 

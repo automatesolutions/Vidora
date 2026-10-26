@@ -43,10 +43,46 @@ function shotSize(t: string) {
  * Models without a negative prompt also get the AVOID line, since nothing else would carry it.
  */
 export function assemble(plan: Plan, model: Pick<DirectorModel, "supportsNegativePrompt">, nicheSource = false): Plan {
+  const tail = sharedTail(plan, model, nicheSource)
+  return { ...plan, scenes: plan.scenes.map((s) => ({ ...s, prompt: `${s.prompt} ${tail}` })) }
+}
+
+function sharedTail(plan: Plan, model: Pick<DirectorModel, "supportsNegativePrompt">, nicheSource: boolean) {
   const l = plan.look
   const avoid = model.supportsNegativePrompt ? "" : ` ${avoidLine(nicheSource)}`
-  const tail = `LIGHTING: ${l.lighting.trim()} COLOR GRADE: ${l.color_grade.trim()} STYLE: ${l.style.trim()} ${OUTPUT_LINE} LOCKS: ${l.locks.trim()}${avoid}`
-  return { ...plan, scenes: plan.scenes.map((s) => ({ ...s, prompt: `${s.prompt} ${tail}` })) }
+  return `LIGHTING: ${l.lighting.trim()} COLOR GRADE: ${l.color_grade.trim()} STYLE: ${l.style.trim()} ${OUTPUT_LINE} LOCKS: ${l.locks.trim()}${avoid}`
+}
+
+const SECTION = /\b(SHOT|SUBJECT|LOCATION|FIRST FRAME|OPTICS|CAMERA|ACTION|PERFORMANCE|PHYSICS|AUDIO):/g
+// Dropped in this order when a prompt is over the model's limit; SHOT, SUBJECT, FIRST FRAME, CAMERA and ACTION always stay.
+const DROP_ORDER = ["PHYSICS", "OPTICS", "PERFORMANCE", "LOCATION", "AUDIO"]
+
+/**
+ * A scene's own sections cut down to `room` characters: whole low-priority sections first, so the
+ * shot, anchor, first frame, camera move, and timed beats survive; a sentence-boundary cut only if that isn't enough.
+ */
+export function fitPrompt(own: string, room: number) {
+  // With almost no room the look itself is the problem; leave it to validation and repair.
+  if (own.length <= room || room < 400) return own
+  const starts = [...own.matchAll(SECTION)]
+  if (!starts.length) return clip(own, room)
+  const sections = starts.map((m, i) => ({ label: m[1]!, text: own.slice(m.index, starts[i + 1]?.index ?? own.length).trim() }))
+  const lead = own.slice(0, starts[0]!.index).trim()
+  const join = (list: typeof sections) => [lead, ...list.map((s) => s.text)].filter(Boolean).join(" ")
+  let kept = sections
+  for (const label of DROP_ORDER) {
+    if (join(kept).length <= room) break
+    kept = kept.filter((s) => s.label !== label)
+  }
+  return clip(join(kept), room)
+}
+
+/** Cut at the last sentence end that fits (or the last space). */
+function clip(text: string, room: number) {
+  if (text.length <= room) return text
+  const head = text.slice(0, room)
+  const end = Math.max(head.lastIndexOf(". "), head.lastIndexOf(".\n"))
+  return (end > room * 0.6 ? head.slice(0, end + 1) : head.slice(0, head.lastIndexOf(" "))).trim()
 }
 
 /** A scene's own sections, without the shared look and locks we append (they name things to avoid). */
@@ -69,9 +105,11 @@ function actionOf(p: string) {
 
 /** Fixes we can make ourselves, before spending a repair call. Returns a new plan. */
 export function autoFix(plan: Plan, input: DirectorInput): Plan {
+  // Over-long prompts get trimmed here instead of failing the run (the model's character limit is hard).
+  const room = promptBudget(input.model).max - sharedTail(plan, input.model, !!input.nicheStudy).length - 1
   const scenes = plan.scenes.map((s, i) => ({
     ...s,
-    prompt: s.prompt.split(SHARED)[0]!.replace(/\s+/g, " ").trim(),
+    prompt: fitPrompt(s.prompt.split(SHARED)[0]!.replace(/\s+/g, " ").trim(), room),
     negative_prompt: input.model.supportsNegativePrompt ? mergeNegative(s.negative_prompt, !!input.nicheStudy) : "",
     // Scene 1 is the cold open; every later scene needs a real transition.
     transition_in: i === 0 ? ("none" as const) : s.transition_in === "none" ? ("hard_cut" as const) : s.transition_in,

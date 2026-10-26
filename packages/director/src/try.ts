@@ -48,7 +48,12 @@ console.log(`Model: ${model.displayName} · durations ${model.durations.join("/"
 console.log("This run:", variation, "\n")
 
 const started = Date.now()
-const result = await createDirector(createClaudeCall()).planRun(input)
+const result = await createDirector(createClaudeCall())
+  .planRun(input)
+  .catch((err) => {
+    if (err?.details) console.error(`${err.message}\n${JSON.stringify(err.details, null, 2)}`)
+    throw err
+  })
 const p = result.plan
 
 console.log(`Hook: ${result.hook}`)

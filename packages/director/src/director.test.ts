@@ -223,6 +223,19 @@ describe("plan validator", () => {
     expect(messages).toMatch(/Scene 3: same shot size as the scene before/)
   })
 
+  it("trims an over-long prompt to the model's limit instead of failing the run", () => {
+    const p = goodPlan()
+    const own = p.scenes[1]!.prompt
+    p.scenes[1]!.prompt = own.replace("ACTION:", `PHYSICS: ${"dust drifts through the light. ".repeat(40)}ACTION:`)
+    const fixed = autoFix(p, input)
+    const sent = assemble(fixed, input.model).scenes[1]!.prompt
+    expect(sent.length).toBeLessThanOrEqual(2500)
+    expect(sent).not.toContain("PHYSICS:")
+    expect(sent).toContain("ACTION:")
+    expect(sent).toContain(ANCHOR)
+    expect(validatePlan(fixed, input, HOOK).filter((i) => i.severity === "error")).toEqual([])
+  })
+
   it("flags narration that signals the ending or runs as a flat list", () => {
     const p = goodPlan()
     p.scenes[1]!.voiceover_line = "Thanks for watching, this one matters."
