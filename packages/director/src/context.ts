@@ -87,6 +87,8 @@ export const BASE_NEGATIVE = [
   "uncanny eyes, frozen expression, duplicated limbs, sudden camera jumps, watermark, subtitles, text overlay",
   // Earlier locks
   "static shot, slow intro, fade in, blurry, low resolution, distorted face, deformed hands, warped text, on-screen text, logo, cartoonish, 3D render, CGI, inconsistent character, flicker, talking, lip movement, phone screen facing camera, readable phone screen",
+  // Continuous flow (creator's list, 2026-10-26)
+  "pause between scenes, freeze frame, still frame, hold at end of scene, dead air, black frames, fade to black between scenes, flash frames, abrupt cut, jump cut, stuttering, choppy transitions, sudden speed change, slow-down at scene end, loading pause, lag, inconsistent pacing, sudden lighting change",
 ].join(", ")
 
 /**
@@ -94,7 +96,7 @@ export const BASE_NEGATIVE = [
  * the positive OUTPUT line doesn't already cover, kept short because it shares the prompt limit.
  */
 export const AVOID_LINE =
-  "AVOID: phone screen visible, scrolling or swiping, app UI, gibberish text, fake logos, subtitles, watermark, robotic or jerky motion, floating body, morphing face, warped or extra fingers, uncanny eyes, frozen expression, sudden camera jumps."
+  "AVOID: phone screen visible, scrolling or swiping, app UI, gibberish text, fake logos, subtitles, watermark, robotic or jerky motion, floating body, morphing face, warped or extra fingers, uncanny eyes, frozen expression, sudden camera jumps, black or flash frames, jump cuts, stuttering, sudden speed or lighting change."
 
 /** Added to the negative prompt of every video made from a niche source link. The same for every link (creator's list, 2026-10-23). */
 export const SOURCE_NEGATIVE =
@@ -110,7 +112,7 @@ export function avoidLine(nicheSource = false) {
 }
 
 /** About how long the shared look is once appended to each scene (validate.ts assemble). */
-export const LOOK_CHARS = 1320
+export const LOOK_CHARS = 1420
 
 const esc = (s: string) => s.replace(/</g, "‹").replace(/>/g, "›") // keep user text from closing our tags
 

@@ -21,11 +21,14 @@ const SECTIONS = ["SHOT:", "FIRST FRAME:", "ACTION:"]
 const SHARED = /\b(?:LIGHTING|COLOR GRADE|STYLE|OUTPUT|LOCKS|AVOID):/
 
 export const OUTPUT_LINE =
-  "OUTPUT: Upright, level, vertical 9:16 composition; subject in the upper two thirds, lower third clear. Always moving, very slight handheld feel; first frame mid-action. Real human motion: subtle breathing, natural blinking, relaxed head turns, unhurried movement; same face and hands throughout; true skin texture; correct anatomy and physics; 24fps film look, no flicker. Phones held loosely, screen away or out of frame, nothing readable. NO ONE SPEAKS: lips closed or relaxed."
+  "OUTPUT: Upright, level, vertical 9:16 composition; faces in the upper half, never in the lower third. Always moving, very slight handheld feel; first frame mid-action. Real human motion: subtle breathing, natural blinking, relaxed head turns, unhurried movement; same face and hands throughout; true skin texture; correct anatomy and physics; 24fps film look, no flicker. Phones held loosely, screen away or out of frame, nothing readable. NO ONE SPEAKS: lips closed or relaxed. FLOW: constant motion first frame to last, steady speed; no pause, freeze, or hold; ends mid-movement."
 
 // Pacing and hook checks.
 const STATIC_MOVE = /\b(static|locked[- ]?off|still frame|no camera movement)\b/i
 const SLOW_OPEN = /\b(fades? in|fade from black|establishing shot|empty frame|slowly reveals?|title card|logo)\b/i
+// Lines that tell viewers the video is ending, or stall it; both cost retention.
+const FILLER = /\b(thanks for watching|let me know what you think|subscribe for more|like and subscribe|that's it for|in this video|let's get started|let's dive in|without further ado)\b/i
+const LINEAR = /\band then\b/i
 /** Shot size buckets, so "close-up" and "tight close-up" count as the same size. */
 function shotSize(t: string) {
   if (/extreme close|macro|detail/i.test(t)) return "ecu"
@@ -150,6 +153,13 @@ export function validatePlan(plan: Plan, input: DirectorInput, hook: string): Is
   const targetWords = total * rate
   if (totalWords > targetWords * 1.2) warn(`The narration has ${totalWords} words; cut it to about ${Math.round(targetWords)} so it fits ${total} s.`)
   if (totalWords < targetWords * 0.45) warn(`The narration has only ${totalWords} words; write about ${Math.round(targetWords * 0.8)} so the video isn't mostly silent.`)
+
+  // Story momentum (viral strategy, 2026-10-26). The CTA scene speaks the creator's own wording, so it's skipped.
+  scenes.slice(0, -1).forEach((s, i) => {
+    const filler = s.voiceover_line.match(FILLER)
+    if (filler) warn(`Scene ${i + 1}: cut "${filler[0]}"; never signal the ending or pad with filler, keep the story moving.`)
+    if (i > 0 && LINEAR.test(s.voiceover_line)) warn(`Scene ${i + 1}: replace "and then" with a "but" or "so" turn, so each step causes or blocks the next.`)
+  })
 
   // The creator's banned topics
   const everything = normalizeText([plan.title, plan.description, plan.voiceover_script, plan.cta_line, ...scenes.map((s) => s.prompt)].join(" "))

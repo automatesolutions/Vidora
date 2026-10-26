@@ -18,7 +18,8 @@ RUN pnpm install --frozen-lockfile --filter @vidora/worker... --filter vidora
 
 FROM base AS run
 ENV NODE_ENV=production \
-    FFMPEG_PATH=/usr/bin/ffmpeg
+    FFMPEG_PATH=/usr/bin/ffmpeg \
+    CHROMIUM_PATH=/usr/bin/chromium
 COPY --from=deps /app ./
 COPY packages/core packages/core
 COPY packages/db packages/db

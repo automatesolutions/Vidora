@@ -54,7 +54,8 @@ export async function renderPageText(url: string): Promise<string | null> {
     log.warn("page render refused: not a public address", { url })
     return null
   }
-  const browser = await chromium.launch({ executablePath: chromiumPath(), args: ["--disable-dev-shm-usage"] })
+  // The worker container runs as a normal user, so Chromium's sandbox can't start there.
+  const browser = await chromium.launch({ executablePath: chromiumPath(), args: ["--no-sandbox", "--disable-dev-shm-usage"] })
   try {
     const context = await browser.newContext({ javaScriptEnabled: true, acceptDownloads: false, serviceWorkers: "block", viewport: { width: 1280, height: 900 } })
     // Check every request, including redirects and the page's own API calls. Hosts are checked once.

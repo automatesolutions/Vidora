@@ -3,7 +3,7 @@ import type { WordTime } from "./voice"
 // Burned-in captions as an ASS subtitle file (FFmpeg's `ass` filter, fonts from assets/fonts):
 //   - word-by-word captions, 1-3 words at a time, the spoken word highlighted and enlarged, each
 //     chunk popping in; they sit at about 72% height, under the subject and above YouTube's own UI
-//   - the hook text (6 words or fewer) slamming in over the first 2 seconds, black on the accent
+//   - the hook text (6 words or fewer) slamming in over the first 2 seconds in the lower third, black on the accent
 //     color; word captions start when it leaves, so there's never two blocks of text at once
 // Times are seconds from the start of the finished Short.
 
@@ -18,7 +18,9 @@ export type CaptionTrack = {
 const W = 1080
 const H = 1920
 const CAPTION_Y = 1380
-const HOOK_Y = 400
+// The hook text sits where the captions go (they wait until it's gone): the lower third, which the
+// director keeps free of faces. Up top it covered the presenter's face.
+const HOOK_Y = CAPTION_Y
 const MAX_CHUNK_CHARS = 16
 
 /** "#FFD60A" → ASS "&H000AD6FF" (alpha, blue, green, red). */

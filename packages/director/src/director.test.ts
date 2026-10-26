@@ -223,6 +223,17 @@ describe("plan validator", () => {
     expect(messages).toMatch(/Scene 3: same shot size as the scene before/)
   })
 
+  it("flags narration that signals the ending or runs as a flat list", () => {
+    const p = goodPlan()
+    p.scenes[1]!.voiceover_line = "Thanks for watching, this one matters."
+    p.scenes[2]!.voiceover_line = "She closed the tabs and then she made tea."
+    const messages = validatePlan(autoFix(p, input), input, HOOK).map((i) => i.message).join("\n")
+    expect(messages).toMatch(/Scene 2: cut "Thanks for watching"/)
+    expect(messages).toMatch(/Scene 3: replace "and then"/)
+    // The CTA is the creator's own wording, so it's never flagged.
+    expect(validatePlan(autoFix(goodPlan(), input), input, HOOK).map((i) => i.message).join("\n")).not.toMatch(/never signal the ending/)
+  })
+
   it("auto-fixes transitions and always adds the base negatives", () => {
     const p = goodPlan()
     p.scenes[0]!.transition_in = "whip_pan"
